@@ -28,13 +28,18 @@ import javafx.scene.layout.*;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Window;
 
+import com.vulntriage.scanner.ParallelScanCoordinator;
+
 import java.io.File;
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Repository Manager screen.
@@ -359,18 +364,33 @@ public class RepositoryView {
         setScanningState(true, "Scanning " + repoNames + "…");
         ctx.setScanRunning(true);
 
+        // Build per-repo scan callables for parallel execution
+        List<Callable<String>> scanCallables = new ArrayList<>();
+        for (int i = 0; i < repos.size(); i++) {
+            final Repository repo = repos.get(i);
+            final int idx = i;
+            final String prefix = repos.size() > 1
+                ? "[" + (idx + 1) + "/" + repos.size() + "] " + repo.getName() + " — "
+                : "";
+            scanCallables.add(() -> {
+                if (cancelRequested.get()) return prefix + "Cancelled.";
+                scanRepo(repo, choice, prefix);
+                return prefix + "Done.";
+            });
+        }
+
+        AtomicInteger completed = new AtomicInteger(0);
+        ParallelScanCoordinator coordinator = new ParallelScanCoordinator();
+
         Task<Void> scanTask = new Task<>() {
             @Override
-            protected Void call() throws Exception {
+            protected Void call() {
                 currentScanThread = Thread.currentThread();
-                for (int i = 0; i < repos.size(); i++) {
-                    if (cancelRequested.get()) break;
-                    Repository repo = repos.get(i);
-                    String prefix = repos.size() > 1
-                        ? "[" + (i + 1) + "/" + repos.size() + "] " + repo.getName() + " — "
-                        : "";
-                    scanRepo(repo, choice, prefix);
-                }
+                coordinator.run(scanCallables, (idx, result) -> {
+                    int done = completed.incrementAndGet();
+                    Platform.runLater(() ->
+                        setStatus(result + "  (" + done + "/" + repos.size() + " repos done)"));
+                });
                 return null;
             }
         };

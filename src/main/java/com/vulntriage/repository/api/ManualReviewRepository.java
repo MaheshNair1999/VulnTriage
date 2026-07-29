@@ -22,4 +22,7 @@ public interface ManualReviewRepository {
 
     /** Count reviews only for the given finding IDs — scoped to the current view. */
     long countForFindingIds(List<Long> findingIds);
+
+    /** Remove the review for a finding (used by undo when the finding had no prior review). */
+    void deleteByFindingId(long findingId);
 }

@@ -30,6 +30,7 @@ public class JsonExporter {
         metrics.put("false_negative_rate",   round(report.getFalseNegativeRate()));
         metrics.put("tp_precision",          round(report.getTpPrecision()));
         metrics.put("fp_agreement",          round(report.getFpAgreement()));
+        metrics.put("false_positive_rate",   round(report.getFalsePositiveRate()));
         metrics.put("review_agreement",      round(report.getReviewAgreement()));
 
         // ── Confusion matrix ───────────────────────────────────────────────

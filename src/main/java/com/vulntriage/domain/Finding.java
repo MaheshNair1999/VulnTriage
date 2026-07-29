@@ -29,6 +29,8 @@ public class Finding {
     private String       cwe;         // e.g. "CWE-89" — null if not reported by scanner
     private String       fingerprint; // SHA-256 of repositoryId+filePath+lineNumber+ruleId
     private LocalDateTime createdAt;
+    private String       cvssVector; // CVSS:3.1/… — null for non-SCA findings
+    private Double       cvssScore;  // computed base score; null when vector absent or unparseable
 
     // ── Constructors ───────────────────────────────────────────────────────
 
@@ -77,6 +79,12 @@ public class Finding {
 
     public LocalDateTime getCreatedAt()                   { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt)     { this.createdAt = createdAt; }
+
+    public String getCvssVector()                         { return cvssVector; }
+    public void setCvssVector(String cvssVector)          { this.cvssVector = cvssVector; }
+
+    public Double getCvssScore()                          { return cvssScore; }
+    public void setCvssScore(Double cvssScore)            { this.cvssScore = cvssScore; }
 
     @Override
     public String toString() {

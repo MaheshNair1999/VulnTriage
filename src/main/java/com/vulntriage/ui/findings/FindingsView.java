@@ -17,8 +17,11 @@ import javafx.scene.layout.*;
 
 import javafx.scene.control.SelectionMode;
 import javafx.scene.input.KeyCode;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Findings Browser screen.
@@ -29,6 +32,8 @@ import java.util.List;
  * Clicking a finding shows its detail in a side panel.
  */
 public class FindingsView {
+
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM HH:mm");
 
     private static final String BG      = "#F1F5F9";
     private static final String CARD_BG = "#FFFFFF";
@@ -268,14 +273,15 @@ public class FindingsView {
             }
         });
 
-        TableColumn<FindingRow, String> srcCol  = col("Source",   "source",   90);
-        TableColumn<FindingRow, String> repoCol = col("Repo",     "repoName", 110);
-        TableColumn<FindingRow, String> sevCol  = colWithBadge("Severity", "severity", 90);
-        TableColumn<FindingRow, String> catCol  = col("Category", "category", 100);
-        TableColumn<FindingRow, String> ruleCol = col("Rule ID",  "ruleId",   220);
-        TableColumn<FindingRow, String> fileCol = col("File",     "filePath", 180);
-        TableColumn<FindingRow, String> lineCol = col("Line",     "lineStr",   55);
-        TableColumn<FindingRow, String> msgCol  = col("Message",  "message",  200);
+        TableColumn<FindingRow, String> srcCol      = col("Source",   "source",    90);
+        TableColumn<FindingRow, String> repoCol     = col("Repo",     "repoName",  110);
+        TableColumn<FindingRow, String> sevCol      = colWithBadge("Severity", "severity", 90);
+        TableColumn<FindingRow, String> catCol      = col("Category", "category",  100);
+        TableColumn<FindingRow, String> ruleCol     = col("Rule ID",  "ruleId",    220);
+        TableColumn<FindingRow, String> fileCol     = col("File",     "filePath",  180);
+        TableColumn<FindingRow, String> lineCol     = col("Line",     "lineStr",    55);
+        TableColumn<FindingRow, String> scannedCol  = col("Scanned",  "scannedAt", 110);
+        TableColumn<FindingRow, String> msgCol      = col("Message",  "message",   200);
         msgCol.setMaxWidth(260);
 
         // Source cell — colour-coded by scanner
@@ -324,7 +330,7 @@ public class FindingsView {
             return row;
         });
 
-        table.getColumns().addAll(numCol, srcCol, repoCol, sevCol, catCol, ruleCol, fileCol, lineCol, msgCol);
+        table.getColumns().addAll(numCol, srcCol, repoCol, sevCol, catCol, ruleCol, fileCol, lineCol, scannedCol, msgCol);
 
         table.getSelectionModel().getSelectedItems().addListener(
             (javafx.collections.ListChangeListener<FindingRow>) c -> {
@@ -362,7 +368,7 @@ public class FindingsView {
         VBox content = new VBox(16);
         content.setPadding(new Insets(20));
 
-        // Top badge row
+        // Top badge row — severity, scanner, repo, and CVSS score when present
         HBox badges = new HBox(10);
         badges.setAlignment(Pos.CENTER_LEFT);
         badges.getChildren().addAll(
@@ -370,6 +376,13 @@ public class FindingsView {
             makeBadge(row.getSource(),   scannerBg(row.getSource()),    scannerFg(row.getSource())),
             makeBadge(row.getRepoName(), "#F3F4F6", "#374151")
         );
+        if (row.getCvssScore() != null) {
+            double s = row.getCvssScore();
+            String cvssLabel = "CVSS " + String.format("%.1f", s);
+            String cvssBg = s >= 9.0 ? "#FEE2E2" : s >= 7.0 ? "#FEF3C7" : s >= 4.0 ? "#EFF6FF" : "#F3F4F6";
+            String cvssFg = s >= 9.0 ? "#991B1B" : s >= 7.0 ? "#92400E" : s >= 4.0 ? "#1E40AF" : "#374151";
+            badges.getChildren().add(makeBadge(cvssLabel, cvssBg, cvssFg));
+        }
 
         // Rule + file
         Label ruleVal = fieldLabel(row.getRuleId());
@@ -518,14 +531,19 @@ public class FindingsView {
     private void loadFindings() {
         allRows.clear();
         int[] counter = {1};
-        ctx.repositoryRepo().findAll().forEach(repo ->
+        ctx.repositoryRepo().findAll().forEach(repo -> {
+            Map<Long, String> scanDates = new HashMap<>();
+            ctx.scanRunRepo().findByRepositoryId(repo.getId()).forEach(sr ->
+                scanDates.put(sr.getId(), sr.getStartedAt() != null
+                    ? sr.getStartedAt().format(DATE_FMT) : "—")
+            );
             ctx.findingRepo().findByRepositoryId(repo.getId()).forEach(f ->
-                allRows.add(toRow(counter[0]++, f, repo.getName()))
-            )
-        );
+                allRows.add(toRow(counter[0]++, f, repo.getName(), scanDates))
+            );
+        });
     }
 
-    private FindingRow toRow(int reviewNum, Finding f, String repoName) {
+    private FindingRow toRow(int reviewNum, Finding f, String repoName, Map<Long, String> scanDates) {
         return new FindingRow(
             reviewNum,
             f.getId(),
@@ -538,7 +556,9 @@ public class FindingsView {
             f.getFilePath()   != null ? f.getFilePath()                  : "",
             f.getLineNumber() != null ? String.valueOf(f.getLineNumber()) : "—",
             f.getMessage()    != null ? f.getMessage()                   : "",
-            f.getCodeSnippet()!= null ? f.getCodeSnippet()               : ""
+            f.getCodeSnippet()!= null ? f.getCodeSnippet()               : "",
+            f.getCvssScore(),
+            scanDates.getOrDefault(f.getScanRunId(), "—")
         );
     }
 
@@ -638,11 +658,14 @@ public class FindingsView {
         private final String lineStr;
         private final String message;
         private final String codeSnippet;
+        private final Double cvssScore;   // null when not applicable
+        private final String scannedAt;
 
         public FindingRow(int reviewNum, long id, long repositoryId, String repoName,
                           String source, String severity, String category,
                           String ruleId, String filePath, String lineStr,
-                          String message, String codeSnippet) {
+                          String message, String codeSnippet, Double cvssScore,
+                          String scannedAt) {
             this.reviewNum    = reviewNum;
             this.id           = id;
             this.repositoryId = repositoryId;
@@ -655,6 +678,8 @@ public class FindingsView {
             this.lineStr      = lineStr;
             this.message      = message;
             this.codeSnippet  = codeSnippet;
+            this.cvssScore    = cvssScore;
+            this.scannedAt    = scannedAt;
         }
 
         public int    getReviewNum()    { return reviewNum; }
@@ -669,5 +694,7 @@ public class FindingsView {
         public String getLineStr()      { return lineStr; }
         public String getMessage()      { return message; }
         public String getCodeSnippet()  { return codeSnippet; }
+        public Double getCvssScore()    { return cvssScore; }
+        public String getScannedAt()    { return scannedAt; }
     }
 }

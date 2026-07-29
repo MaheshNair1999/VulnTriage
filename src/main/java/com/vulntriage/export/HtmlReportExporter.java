@@ -3,6 +3,7 @@ package com.vulntriage.export;
 import com.vulntriage.domain.Finding;
 import com.vulntriage.domain.LlmResult;
 import com.vulntriage.domain.ManualReview;
+import com.vulntriage.domain.enums.ScannerType;
 import com.vulntriage.domain.enums.Verdict;
 import com.vulntriage.evaluation.ConfusionMatrix;
 import com.vulntriage.evaluation.EvaluationReport;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class HtmlReportExporter {
 
@@ -102,8 +104,20 @@ public class HtmlReportExporter {
             .matrix .off{background:#F9FAFB;color:var(--slate)}
             .matrix .total{background:#F1F5F9;color:var(--navy);font-size:1rem}
 
-            /* Scanner summary */
-            .scanner-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+            /* Scanner breakdown */
+            .sc-hdr{display:flex;justify-content:space-between;align-items:center;
+              border-bottom:2px solid var(--border);padding-bottom:8px;margin-bottom:18px}
+            .sc-title{border:none;padding:0;margin:0}
+            .sc-select{font-size:12px;padding:5px 10px;border:1px solid var(--border);
+              border-radius:6px;background:var(--card);color:var(--navy);font-weight:600;cursor:pointer}
+            .sc-4col{grid-template-columns:repeat(4,1fr)!important;margin-bottom:0}
+            .sc-verdict-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+            .sc-vbox{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+            .sc-vbox-title{font-weight:700;font-size:13px;color:var(--navy);margin-bottom:12px}
+            .sc-vrow{display:flex;justify-content:space-between;padding:7px 0;
+              border-bottom:1px solid var(--border);font-size:13px;color:var(--slate)}
+            .sc-vrow:last-child{border-bottom:none}
+            .sc-vnum{font-weight:600;color:var(--navy)}
             .sc-card{background:var(--card);border:1px solid var(--border);border-radius:8px;
               padding:14px 16px}
             .sc-val{font-size:1.6rem;font-weight:700;font-family:'Courier New',monospace}
@@ -121,6 +135,7 @@ public class HtmlReportExporter {
             .findings-table tr:hover td{background:#EFF6FF}
             .findings-table td.mono{font-family:'Courier New',monospace;font-size:11.5px}
             .findings-table td.num{color:var(--muted);font-size:11px;font-family:'Courier New',monospace}
+            .findings-table td.file-cell{max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
             .findings-table td.mismatch{background:#FFF7ED!important}
 
             /* Badges */
@@ -170,10 +185,11 @@ public class HtmlReportExporter {
         sb.append(metricCard("TP Recall",          pct(report.getTpRecall()),          "#059669", "LLM caught this fraction of real vulnerabilities"));
         sb.append(metricCard("False Negative Rate", pct(report.getFalseNegativeRate()), report.getFalseNegativeRate() == 0 ? "#059669" : "#DC2626", "Real bugs the LLM dismissed as safe &mdash; lower is better"));
         sb.append(metricCard("Overall Accuracy",    pct(report.getAccuracy()),          "#1D4ED8", "Agreement across all three verdict classes"));
-        sb.append("</div><div class=\"metric-row\">");
-        sb.append(metricCard("TP Precision",       pct(report.getTpPrecision()),    "#D97706", "Of LLM&rsquo;s TP predictions, how many were correct"));
-        sb.append(metricCard("FP Agreement",       pct(report.getFpAgreement()),    "#D97706", "LLM correctly identified false positives"));
-        sb.append(metricCard("REVIEW Agreement",   pct(report.getReviewAgreement()),"#7C3AED", "LLM used REVIEW on findings the reviewer found uncertain"));
+        sb.append("</div><div class=\"metric-row\" style=\"grid-template-columns:repeat(4,1fr)\">");
+        sb.append(metricCard("TP Precision",       pct(report.getTpPrecision()),       "#D97706", "Of LLM&rsquo;s TP predictions, how many were correct"));
+        sb.append(metricCard("FP Agreement",       pct(report.getFpAgreement()),       "#D97706", "LLM correctly identified false positives"));
+        sb.append(metricCard("FP Rate",            pct(report.getFalsePositiveRate()), report.getFalsePositiveRate() == 0 ? "#059669" : "#DC2626", "Noise the LLM wrongly escalated as real bugs &mdash; lower is better"));
+        sb.append(metricCard("REVIEW Agreement",   pct(report.getReviewAgreement()),   "#7C3AED", "LLM used REVIEW on findings the reviewer found uncertain"));
         sb.append("</div></section>\n\n");
 
         // ── Confusion Matrix ───────────────────────────────────────────────
@@ -202,25 +218,104 @@ public class HtmlReportExporter {
         sb.append("</table></div></section>\n\n");
 
         // ── Scanner Summary ────────────────────────────────────────────────
-        sb.append("<section class=\"section\">");
-        sb.append("<h2 class=\"section-title\">Scanner Breakdown</h2>");
-        sb.append("<div class=\"scanner-grid\">");
-
         long totalReviewed = reviewsByFindingId.size();
         long totalLlm      = llmByFindingId.size();
-        long totalAgreed   = reviewsByFindingId.entrySet().stream()
-            .filter(e -> {
-                LlmResult l = llmByFindingId.get(e.getKey());
-                return l != null && l.getLlmVerdict() == e.getValue().getVerdict();
-            }).count();
-        String aggPct = totalReviewed > 0
-            ? String.format("%.1f%%", (double) totalAgreed / totalReviewed * 100) : "&mdash;";
 
-        sb.append(scCard(String.valueOf(findings.size()),   "Total Findings",    "#1D4ED8"));
-        sb.append(scCard(String.valueOf(totalReviewed),     "Manually Reviewed", "#059669"));
-        sb.append(scCard(String.valueOf(totalLlm),          "LLM Triaged",       "#D97706"));
-        sb.append(scCard(aggPct,                            "LLM Agreement",     "#7C3AED"));
-        sb.append("</div></section>\n\n");
+        // Build per-scanner stats — only scanners that actually produced findings
+        Map<ScannerType, List<Finding>> findingsByScanner = findings.stream()
+            .filter(f -> f.getSource() != null)
+            .collect(Collectors.groupingBy(Finding::getSource));
+
+        List<String> scannerJsonList = findingsByScanner.entrySet().stream()
+            .sorted((a, b) -> Integer.compare(b.getValue().size(), a.getValue().size()))
+            .map(entry -> {
+                ScannerType   type = entry.getKey();
+                List<Finding> sf   = entry.getValue();
+
+                List<Finding> sfRev = sf.stream()
+                    .filter(f -> reviewsByFindingId.containsKey(f.getId()))
+                    .collect(Collectors.toList());
+                List<Finding> sfLlm = sf.stream()
+                    .filter(f -> llmByFindingId.containsKey(f.getId()))
+                    .collect(Collectors.toList());
+
+                long agreed = sfRev.stream().filter(f -> {
+                    LlmResult l = llmByFindingId.get(f.getId());
+                    return l != null && l.getLlmVerdict() == reviewsByFindingId.get(f.getId()).getVerdict();
+                }).count();
+
+                String aPct = sfRev.isEmpty() ? "—"
+                    : String.format("%.1f%%", (double) agreed / sfRev.size() * 100);
+
+                long mTP  = sfRev.stream().filter(f -> reviewsByFindingId.get(f.getId()).getVerdict() == Verdict.TP).count();
+                long mFP  = sfRev.stream().filter(f -> reviewsByFindingId.get(f.getId()).getVerdict() == Verdict.FP).count();
+                long mRev = sfRev.stream().filter(f -> reviewsByFindingId.get(f.getId()).getVerdict() == Verdict.REVIEW).count();
+
+                long lTP  = sfLlm.stream().filter(f -> llmByFindingId.get(f.getId()).getLlmVerdict() == Verdict.TP).count();
+                long lFP  = sfLlm.stream().filter(f -> llmByFindingId.get(f.getId()).getLlmVerdict() == Verdict.FP).count();
+                long lRev = sfLlm.stream().filter(f -> llmByFindingId.get(f.getId()).getLlmVerdict() == Verdict.REVIEW).count();
+
+                return String.format(
+                    "{\"name\":\"%s\",\"color\":\"%s\",\"total\":%d,\"reviewed\":%d,"
+                    + "\"llmTriaged\":%d,\"agreePct\":\"%s\","
+                    + "\"mTP\":%d,\"mFP\":%d,\"mREV\":%d,"
+                    + "\"lTP\":%d,\"lFP\":%d,\"lREV\":%d}",
+                    type.name(), scannerColor(type), sf.size(),
+                    sfRev.size(), sfLlm.size(), aPct,
+                    mTP, mFP, mRev, lTP, lFP, lRev);
+            })
+            .collect(Collectors.toList());
+
+        String scannerJson = "[" + String.join(",", scannerJsonList) + "]";
+
+        sb.append("<section class=\"section\">");
+        sb.append("<div class=\"sc-hdr\">");
+        sb.append("<h2 class=\"section-title sc-title\">Scanner Breakdown</h2>");
+        if (!findingsByScanner.isEmpty()) {
+            sb.append("<select class=\"sc-select\" id=\"sc-sel\" onchange=\"scSwitch(this.value)\"></select>");
+        }
+        sb.append("</div>");
+        sb.append("<div class=\"metric-row sc-4col\" id=\"sc-cards\"></div>");
+        sb.append("<div class=\"sc-verdict-row\" id=\"sc-verdicts\"></div>");
+        sb.append("<script>\n");
+        sb.append("var SC_DATA=").append(scannerJson).append(";\n");
+        sb.append("function scSwitch(n){\n");
+        sb.append("  var d=SC_DATA.find(function(s){return s.name===n;});\n");
+        sb.append("  if(!d)return;\n");
+        sb.append("  function pct(v,t){return t>0?' ('+Math.round(v/t*100)+'%)':''}\n");
+        sb.append("  document.getElementById('sc-cards').innerHTML=\n");
+        sb.append("    scCard(d.total,'Total Findings','From this scanner in database',d.color)+\n");
+        sb.append("    scCard(d.reviewed,'Manually Reviewed','Findings with TP/FP/REVIEW verdict','#059669')+\n");
+        sb.append("    scCard(d.llmTriaged,'LLM Triaged','Findings processed by LLM triage','#D97706')+\n");
+        sb.append("    scCard(d.agreePct,'LLM Agreement','LLM matched manual verdict','#7C3AED');\n");
+        sb.append("  document.getElementById('sc-verdicts').innerHTML=\n");
+        sb.append("    '<div class=\"sc-vbox\"><div class=\"sc-vbox-title\">Manual Review Verdicts</div>'+\n");
+        sb.append("    scRow('True Positive (TP)',d.mTP,pct(d.mTP,d.reviewed))+\n");
+        sb.append("    scRow('False Positive (FP)',d.mFP,pct(d.mFP,d.reviewed))+\n");
+        sb.append("    scRow('Needs Review',d.mREV,pct(d.mREV,d.reviewed))+\n");
+        sb.append("    '</div><div class=\"sc-vbox\"><div class=\"sc-vbox-title\">LLM Triage Verdicts</div>'+\n");
+        sb.append("    scRow('True Positive (TP)',d.lTP,pct(d.lTP,d.llmTriaged))+\n");
+        sb.append("    scRow('False Positive (FP)',d.lFP,pct(d.lFP,d.llmTriaged))+\n");
+        sb.append("    scRow('Needs Review',d.lREV,pct(d.lREV,d.llmTriaged))+\n");
+        sb.append("    '</div>';\n");
+        sb.append("}\n");
+        sb.append("function scCard(v,n,desc,c){\n");
+        sb.append("  return '<div class=\"metric-card\">'\n");
+        sb.append("    +'<div class=\"metric-bar\" style=\"background:'+c+'\"></div>'\n");
+        sb.append("    +'<div class=\"metric-val\" style=\"color:'+c+'\">'+v+'</div>'\n");
+        sb.append("    +'<div class=\"metric-name\">'+n+'</div>'\n");
+        sb.append("    +'<div class=\"metric-desc\">'+desc+'</div></div>';\n");
+        sb.append("}\n");
+        sb.append("function scRow(lbl,cnt,p){\n");
+        sb.append("  return '<div class=\"sc-vrow\"><span>'+lbl+'</span><span class=\"sc-vnum\">'+cnt+p+'</span></div>';\n");
+        sb.append("}\n");
+        sb.append("var sel=document.getElementById('sc-sel');\n");
+        sb.append("if(sel){\n");
+        sb.append("  SC_DATA.forEach(function(s){var o=document.createElement('option');o.value=s.name;o.textContent=s.name;sel.appendChild(o);});\n");
+        sb.append("  if(SC_DATA.length>0)scSwitch(SC_DATA[0].name);\n");
+        sb.append("}\n");
+        sb.append("</script>\n");
+        sb.append("</section>\n\n");
 
         // ── Findings Table ─────────────────────────────────────────────────
         sb.append("<section class=\"section\">");
@@ -260,7 +355,7 @@ public class HtmlReportExporter {
             // File / Line
             String fileLine = f.getFilePath() != null ? shortPath(f.getFilePath()) : "";
             if (f.getLineNumber() != null) fileLine += ":" + f.getLineNumber();
-            sb.append("<td class=\"mono\">").append(esc(fileLine)).append("</td>");
+            sb.append("<td class=\"mono file-cell\">").append(esc(fileLine)).append("</td>");
             // Manual Verdict
             sb.append("<td>").append(hasReview ? verdictBadge(rev.getVerdict()) : "<span class=\"badge badge-none\">&mdash;</span>").append("</td>");
             // LLM Verdict
@@ -339,6 +434,16 @@ public class HtmlReportExporter {
             default          -> "#1E40AF";
         };
         return "<span style=\"font-size:10px;font-weight:700;color:" + color + ";font-family:'Courier New',monospace\">" + src + "</span>";
+    }
+
+    private String scannerColor(ScannerType type) {
+        return switch (type) {
+            case SEMGREP   -> "#1E40AF";
+            case TRIVY     -> "#92400E";
+            case GITLEAKS  -> "#B45309";
+            case CODEQL    -> "#065F46";
+            case SONARQUBE -> "#991B1B";
+        };
     }
 
     private String pct(double v) {

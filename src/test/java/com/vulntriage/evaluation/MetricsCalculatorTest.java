@@ -110,6 +110,9 @@ class MetricsCalculatorTest {
             public Optional<LlmResult> findByFindingIdAndRunId(long f, long r) { return Optional.empty(); }
             public List<LlmResult> findByEvaluationRunId(long id) { return results; }
             public long countByEvaluationRunId(long id) { return results.size(); }
+            public boolean existsByFindingId(long findingId) { return results.stream().anyMatch(r -> r.getFindingId() == findingId); }
+            public Optional<LlmResult> findByFindingId(long findingId) { return results.stream().filter(r -> r.getFindingId() == findingId).findFirst(); }
+            public void deleteByFindingId(long findingId) {}
         };
     }
 
@@ -127,6 +130,8 @@ class MetricsCalculatorTest {
                 return reviews.stream().filter(r -> r.getVerdict() == v).count();
             }
             public long countAll() { return reviews.size(); }
+            public long countForFindingIds(List<Long> ids) { return 0; }
+            public void deleteByFindingId(long findingId) {}
         };
     }
 

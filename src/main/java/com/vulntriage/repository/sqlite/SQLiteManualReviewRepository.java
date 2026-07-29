@@ -122,6 +122,17 @@ public class SQLiteManualReviewRepository implements ManualReviewRepository {
         }
     }
 
+    @Override
+    public void deleteByFindingId(long findingId) {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "DELETE FROM manual_reviews WHERE finding_id = ?")) {
+            ps.setLong(1, findingId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to delete review for finding id=" + findingId, e);
+        }
+    }
+
     private ManualReview map(ResultSet rs) throws SQLException {
         ManualReview mr = new ManualReview();
         mr.setId       (rs.getLong  ("id"));

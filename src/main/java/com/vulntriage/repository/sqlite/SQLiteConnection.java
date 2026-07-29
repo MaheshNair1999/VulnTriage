@@ -98,7 +98,9 @@ public class SQLiteConnection {
                     code_snippet  TEXT,
                     cwe           TEXT,
                     fingerprint   TEXT    NOT NULL,
-                    created_at    TEXT    NOT NULL
+                    created_at    TEXT    NOT NULL,
+                    cvss_vector   TEXT,
+                    cvss_score    REAL
                 )
             """);
 
@@ -195,6 +197,22 @@ public class SQLiteConnection {
             if (!hasHidden) {
                 stmt.executeUpdate("ALTER TABLE repositories ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
                 log.info("Schema migration: added 'hidden' column to repositories table");
+            }
+
+            // Migration: add CVSS v3.1 fields to findings (added for CVSS calculator feature)
+            boolean hasCvssVector = connection.getMetaData()
+                .getColumns(null, null, "findings", "cvss_vector")
+                .next();
+            if (!hasCvssVector) {
+                stmt.executeUpdate("ALTER TABLE findings ADD COLUMN cvss_vector TEXT");
+                log.info("Schema migration: added 'cvss_vector' column to findings table");
+            }
+            boolean hasCvssScore = connection.getMetaData()
+                .getColumns(null, null, "findings", "cvss_score")
+                .next();
+            if (!hasCvssScore) {
+                stmt.executeUpdate("ALTER TABLE findings ADD COLUMN cvss_score REAL");
+                log.info("Schema migration: added 'cvss_score' column to findings table");
             }
         } catch (SQLException e) {
             log.warn("Schema migration check failed (non-fatal): {}", e.getMessage());

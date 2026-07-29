@@ -120,6 +120,18 @@ public class TrivyOutputParser {
             f.setCwe(cweIds.get(0).asText("").trim());
         }
 
+        // CVSS v3 vector — prefer NVD source, fall back to redhat/ghsa
+        JsonNode cvssNode = vuln.path("CVSS");
+        if (cvssNode.isObject()) {
+            for (String src : new String[]{"nvd", "redhat", "ghsa"}) {
+                String v3 = cvssNode.path(src).path("V3Vector").asText(null);
+                if (v3 != null && v3.startsWith("CVSS:3.")) {
+                    f.setCvssVector(v3);
+                    break;
+                }
+            }
+        }
+
         return f;
     }
 

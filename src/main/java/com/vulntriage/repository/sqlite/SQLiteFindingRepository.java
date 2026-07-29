@@ -31,8 +31,8 @@ public class SQLiteFindingRepository implements FindingRepository {
             INSERT OR IGNORE INTO findings
               (scan_run_id, repository_id, source, rule_id, file_path,
                line_number, severity, category, message, code_snippet,
-               cwe, fingerprint, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+               cwe, fingerprint, created_at, cvss_vector, cvss_score)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """;
         try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setLong  (1,  f.getScanRunId());
@@ -49,6 +49,9 @@ public class SQLiteFindingRepository implements FindingRepository {
             ps.setString(11, f.getCwe());
             ps.setString(12, f.getFingerprint());
             ps.setString(13, LocalDateTime.now().toString());
+            ps.setString(14, f.getCvssVector());
+            if (f.getCvssScore() != null) ps.setDouble(15, f.getCvssScore());
+            else                           ps.setNull  (15, Types.REAL);
 
             int rows = ps.executeUpdate();
             if (rows > 0) {
@@ -243,6 +246,9 @@ public class SQLiteFindingRepository implements FindingRepository {
         f.setFingerprint (rs.getString("fingerprint"));
         String ca = rs.getString("created_at");
         if (ca != null) f.setCreatedAt(LocalDateTime.parse(ca));
+        f.setCvssVector  (rs.getString("cvss_vector"));
+        double cvssScore = rs.getDouble("cvss_score");
+        f.setCvssScore   (rs.wasNull() ? null : cvssScore);
         return f;
     }
 }

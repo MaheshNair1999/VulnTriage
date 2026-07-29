@@ -275,6 +275,7 @@ class PipelineIntegrationTest {
         @Override public long countByVerdict(Verdict v) { return 0; }
         @Override public long countUnreviewed() { return store.size(); }
         @Override public void deleteByScanRunId(long id) { store.values().removeIf(f -> f.getScanRunId() == id); }
+        @Override public void deleteById(long id) { store.remove(id); }
     }
 
     static class InMemoryRepositoryRepo implements RepositoryRepo {
@@ -331,6 +332,8 @@ class PipelineIntegrationTest {
             return store.values().stream().filter(r -> r.getVerdict() == v).count();
         }
         @Override public long countAll() { return store.size(); }
+        @Override public long countForFindingIds(List<Long> ids) { return store.values().stream().filter(r -> ids.contains(r.getFindingId())).count(); }
+        @Override public void deleteByFindingId(long findingId) { store.remove(findingId); }
     }
 
     static class InMemoryLlmResultRepository implements LlmResultRepository {
@@ -350,6 +353,15 @@ class PipelineIntegrationTest {
         }
         @Override public long countByEvaluationRunId(long runId) {
             return store.values().stream().filter(r -> r.getEvaluationRunId() == runId).count();
+        }
+        @Override public boolean existsByFindingId(long findingId) {
+            return store.values().stream().anyMatch(r -> r.getFindingId() == findingId);
+        }
+        @Override public Optional<com.vulntriage.domain.LlmResult> findByFindingId(long findingId) {
+            return store.values().stream().filter(r -> r.getFindingId() == findingId).findFirst();
+        }
+        @Override public void deleteByFindingId(long findingId) {
+            store.entrySet().removeIf(e -> e.getValue().getFindingId() == findingId);
         }
     }
 
@@ -375,5 +387,6 @@ class PipelineIntegrationTest {
                 .filter(s -> s[0] == runId)
                 .map(s -> s[1]).toList();
         }
+        @Override public void deleteById(long id) { store.remove(id); }
     }
 }

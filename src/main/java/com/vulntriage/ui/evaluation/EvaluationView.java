@@ -232,6 +232,12 @@ public class EvaluationView {
                 "LLM correctly identified false positives",
                 true),
 
+            metricCard("FP Rate",
+                pct(report.getFalsePositiveRate()),
+                report.getFalsePositiveRate() == 0 ? GREEN : RED,
+                "Noise wrongly escalated as real bugs — lower is better",
+                report.getFalsePositiveRate() == 0.0),
+
             metricCard("REVIEW Agreement",
                 pct(report.getReviewAgreement()),
                 MUTED,

@@ -18,6 +18,7 @@ public class EvaluationReport {
     private double fpAgreement;       // LLM FP correct / total manual FP
     private double reviewAgreement;   // LLM REVIEW correct / total manual REVIEW
     private double falseNegativeRate; // manual TP dismissed as FP by LLM / total manual TP
+    private double falsePositiveRate; // manual FP escalated as TP by LLM / total manual FP
 
     // ── Getters & Setters ──────────────────────────────────────────────────
 
@@ -50,4 +51,7 @@ public class EvaluationReport {
 
     public double          getFalseNegativeRate()         { return falseNegativeRate; }
     public void            setFalseNegativeRate(double v) { this.falseNegativeRate = v; }
+
+    public double          getFalsePositiveRate()         { return falsePositiveRate; }
+    public void            setFalsePositiveRate(double v) { this.falsePositiveRate = v; }
 }

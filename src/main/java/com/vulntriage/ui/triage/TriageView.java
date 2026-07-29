@@ -38,6 +38,9 @@ import java.util.List;
  */
 public class TriageView {
 
+    private static final java.time.format.DateTimeFormatter DATE_FMT =
+        java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm");
+
     private static final String BG    = "#F1F5F9";
     private static final String CARD  = "#FFFFFF";
     private static final String TEXT  = "#111827";
@@ -265,12 +268,13 @@ public class TriageView {
             return row;
         });
 
-        TableColumn<ResultRow, String> verdictCol = col("Verdict",    "verdict",    80);
-        TableColumn<ResultRow, String> confCol    = col("Confidence", "confidence", 80);
-        TableColumn<ResultRow, String> repoCol    = col("Repository", "repoName",   160);
-        TableColumn<ResultRow, String> fileCol    = col("File",       "filePath",   180);
-        TableColumn<ResultRow, String> ruleCol    = col("Rule",       "ruleId",     200);
-        TableColumn<ResultRow, String> reasonCol  = col("Reasoning",  "reasoning",  0);
+        TableColumn<ResultRow, String> verdictCol   = col("Verdict",    "verdict",    80);
+        TableColumn<ResultRow, String> confCol      = col("Confidence", "confidence", 80);
+        TableColumn<ResultRow, String> triagedCol   = col("Triaged",    "triagedAt",  110);
+        TableColumn<ResultRow, String> repoCol      = col("Repository", "repoName",   160);
+        TableColumn<ResultRow, String> fileCol      = col("File",       "filePath",   180);
+        TableColumn<ResultRow, String> ruleCol      = col("Rule",       "ruleId",     200);
+        TableColumn<ResultRow, String> reasonCol    = col("Reasoning",  "reasoning",  0);
 
         verdictCol.setCellFactory(tc -> new TableCell<>() {
             @Override
@@ -286,7 +290,7 @@ public class TriageView {
             }
         });
 
-        table.getColumns().addAll(verdictCol, confCol, repoCol, fileCol, ruleCol, reasonCol);
+        table.getColumns().addAll(verdictCol, confCol, triagedCol, repoCol, fileCol, ruleCol, reasonCol);
 
         // Delete key — removes selected rows from table AND from DB
         table.setOnKeyPressed(event -> {
@@ -427,7 +431,9 @@ public class TriageView {
                                 finding.getRuleId()   != null ? finding.getRuleId()   : "",
                                 existing.getReasoning() != null
                                     ? existing.getReasoning().substring(0,
-                                        Math.min(120, existing.getReasoning().length())) : ""
+                                        Math.min(120, existing.getReasoning().length())) : "",
+                                existing.getCreatedAt() != null
+                                    ? existing.getCreatedAt().format(DATE_FMT) : "—"
                             );
                             Platform.runLater(() -> resultRows.add(row));
                         });
@@ -464,7 +470,8 @@ public class TriageView {
                             finding.getRuleId()   != null ? finding.getRuleId()   : "",
                             result.getReasoning() != null
                                 ? result.getReasoning().substring(0,
-                                    Math.min(120, result.getReasoning().length())) : ""
+                                    Math.min(120, result.getReasoning().length())) : "",
+                            LocalDateTime.now().format(DATE_FMT)
                         );
                     } catch (Exception e) {
                         updateMessage("Warning: failed to triage finding "
@@ -647,6 +654,8 @@ public class TriageView {
                     String reasoning = llm.getReasoning() != null
                         ? llm.getReasoning().substring(0, Math.min(120, llm.getReasoning().length()))
                         : "";
+                    String triagedAt = llm.getCreatedAt() != null
+                        ? llm.getCreatedAt().format(DATE_FMT) : "—";
                     loaded.add(new ResultRow(
                         f.getId(),
                         llm.getLlmVerdict() != null ? llm.getLlmVerdict().name() : "—",
@@ -654,7 +663,8 @@ public class TriageView {
                         repoName,
                         f.getFilePath() != null ? f.getFilePath() : "",
                         f.getRuleId()   != null ? f.getRuleId()   : "",
-                        reasoning
+                        reasoning,
+                        triagedAt
                     ));
                 });
             });
@@ -744,9 +754,11 @@ public class TriageView {
         private final String filePath;
         private final String ruleId;
         private final String reasoning;
+        private final String triagedAt;
 
         public ResultRow(long findingId, String verdict, String confidence,
-                         String repoName, String filePath, String ruleId, String reasoning) {
+                         String repoName, String filePath, String ruleId,
+                         String reasoning, String triagedAt) {
             this.findingId  = findingId;
             this.verdict    = verdict;
             this.confidence = confidence;
@@ -754,6 +766,7 @@ public class TriageView {
             this.filePath   = filePath;
             this.ruleId     = ruleId;
             this.reasoning  = reasoning;
+            this.triagedAt  = triagedAt;
         }
 
         public long   getFindingId()  { return findingId; }
@@ -763,5 +776,6 @@ public class TriageView {
         public String getFilePath()   { return filePath; }
         public String getRuleId()     { return ruleId; }
         public String getReasoning()  { return reasoning; }
+        public String getTriagedAt()  { return triagedAt; }
     }
 }

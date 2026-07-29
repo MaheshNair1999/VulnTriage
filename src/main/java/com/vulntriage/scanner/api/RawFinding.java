@@ -31,6 +31,7 @@ public class RawFinding {
     private String packageName;
     private String installedVersion;
     private String fixedVersion;
+    private String cvssVector;  // CVSS:3.1/… extracted from Trivy NVD data, null for non-SCA findings
 
     // ── Getters & Setters ──────────────────────────────────────────────────
 
@@ -72,6 +73,9 @@ public class RawFinding {
 
     public String  getFixedVersion()                 { return fixedVersion; }
     public void    setFixedVersion(String v)         { this.fixedVersion = v; }
+
+    public String  getCvssVector()                   { return cvssVector; }
+    public void    setCvssVector(String cvssVector)  { this.cvssVector = cvssVector; }
 
     @Override
     public String toString() {

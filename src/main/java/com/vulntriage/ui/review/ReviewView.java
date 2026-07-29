@@ -1,6 +1,8 @@
 package com.vulntriage.ui.review;
 
 import com.vulntriage.app.AppContext;
+import com.vulntriage.command.AssignVerdictCommand;
+import com.vulntriage.command.CommandHistory;
 import com.vulntriage.domain.Finding;
 import com.vulntriage.domain.ManualReview;
 import com.vulntriage.domain.enums.Verdict;
@@ -54,6 +56,7 @@ public class ReviewView {
     // ── State ──────────────────────────────────────────────────────────────
     private List<Finding> findings  = new ArrayList<>();
     private int           index     = 0;
+    private final CommandHistory history = new CommandHistory();
 
     // ── UI references ──────────────────────────────────────────────────────
     private Label   positionLabel;
@@ -63,6 +66,7 @@ public class ReviewView {
     private Label   categoryLabel;
     private Label   scannerBadge;
     private Label   ruleLabel;
+    private Label   cvssLabel;
     private Label   fileLabel;
     private Label   messageLabel;
     private TextArea codeArea;
@@ -98,8 +102,11 @@ public class ReviewView {
                 case T -> { assignVerdict(Verdict.TP);     event.consume(); }
                 case F -> { assignVerdict(Verdict.FP);     event.consume(); }
                 case R -> { assignVerdict(Verdict.REVIEW); event.consume(); }
-                case RIGHT              -> { moveNext();  event.consume(); }
-                case LEFT, BACK_SPACE   -> { movePrev();  event.consume(); }
+                case RIGHT            -> { moveNext();  event.consume(); }
+                case LEFT, BACK_SPACE -> { movePrev();  event.consume(); }
+                case Z -> {
+                    if (event.isControlDown()) { undoLastVerdict(); event.consume(); }
+                }
                 default -> {}
             }
         });
@@ -190,6 +197,12 @@ public class ReviewView {
             + "; -fx-font-family: '" + MONO + "';");
         ruleLabel.setWrapText(true);
 
+        // CVSS score (visible only for findings that carry a vector)
+        cvssLabel = new Label();
+        cvssLabel.setStyle("-fx-font-size: 11px; -fx-font-weight: bold;");
+        cvssLabel.setVisible(false);
+        cvssLabel.setManaged(false);
+
         // File + line
         fileLabel = new Label();
         fileLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED
@@ -232,7 +245,7 @@ public class ReviewView {
             + "-fx-border-radius: 6px; -fx-background-radius: 6px;");
 
         panel.getChildren().addAll(
-            progressBar, meta, ruleLabel, fileLabel, messageLabel,
+            progressBar, meta, ruleLabel, cvssLabel, fileLabel, messageLabel,
             codeHeader, codeArea, notesHeading, notesField
         );
         return panel;
@@ -378,6 +391,18 @@ public class ReviewView {
             scannerBadge.setVisible(false);
         }
         ruleLabel.setText("Rule: " + (f.getRuleId() != null ? f.getRuleId() : "—"));
+        if (f.getCvssScore() != null) {
+            double s = f.getCvssScore();
+            String sev = com.vulntriage.cvss.CvssCalculator.severity(s);
+            String color = s >= 9.0 ? RED : s >= 7.0 ? AMBER : s >= 4.0 ? BLUE : MUTED;
+            cvssLabel.setText(String.format("CVSS v3.1  %.1f  (%s)", s, sev));
+            cvssLabel.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: " + color + ";");
+            cvssLabel.setVisible(true);
+            cvssLabel.setManaged(true);
+        } else {
+            cvssLabel.setVisible(false);
+            cvssLabel.setManaged(false);
+        }
         fileLabel.setText("File: " + (f.getFilePath() != null ? f.getFilePath() : "—")
             + (f.getLineNumber() != null ? "  :  line " + f.getLineNumber() : ""));
         messageLabel.setText(f.getMessage() != null ? f.getMessage() : "");
@@ -399,14 +424,25 @@ public class ReviewView {
         if (findings.isEmpty()) return;
         Finding f = findings.get(index);
 
-        ManualReview review = new ManualReview(f.getId(), verdict, notesField.getText().trim());
-        ctx.reviewRepo().saveOrUpdate(review);
+        // Capture previous state for undo
+        Optional<ManualReview> prior = ctx.reviewRepo().findByFindingId(f.getId());
+        Verdict prevVerdict = prior.map(ManualReview::getVerdict).orElse(null);
+        String  prevNotes   = prior.map(ManualReview::getNotes).orElse(null);
 
-        // Visual feedback flash
+        AssignVerdictCommand cmd = new AssignVerdictCommand(
+            ctx.reviewRepo(), f.getId(), verdict, notesField.getText().trim(),
+            prevVerdict, prevNotes
+        );
+        history.executeAndPush(cmd);
+
         setCurrentVerdictLabel(verdict);
-
-        // Auto-advance to next unreviewed finding
         moveToNextUnreviewed();
+    }
+
+    private void undoLastVerdict() {
+        if (!history.undo()) return;
+        // Refresh current finding display to reflect restored state
+        showFinding(index);
     }
 
     private void moveToNextUnreviewed() {

@@ -1,6 +1,7 @@
 package com.vulntriage.app;
 
 import com.vulntriage.config.AppConfig;
+import com.vulntriage.repository.CachingFindingRepository;
 import com.vulntriage.repository.api.WorkflowRepository;
 import com.vulntriage.repository.sqlite.SQLiteWorkflowRepository;
 import com.vulntriage.repository.api.*;
@@ -42,7 +43,7 @@ public class AppContext {
 
     private AppContext() {
         repositoryRepo = new SQLiteRepositoryRepo();
-        findingRepo    = new SQLiteFindingRepository();
+        findingRepo    = new CachingFindingRepository(new SQLiteFindingRepository());
         scanRunRepo    = new SQLiteScanRunRepository();
         reviewRepo     = new SQLiteManualReviewRepository();
         llmRepo        = new SQLiteLlmResultRepository();

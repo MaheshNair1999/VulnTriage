@@ -1,5 +1,8 @@
 package com.vulntriage.normaliser;
 
+import com.vulntriage.cvss.CvssCalculator;
+import com.vulntriage.cvss.CvssException;
+import com.vulntriage.cvss.CvssVector;
 import com.vulntriage.domain.Finding;
 import com.vulntriage.domain.enums.Severity;
 import com.vulntriage.domain.enums.ScannerType;
@@ -51,6 +54,17 @@ public class FindingNormaliser {
         f.setCodeSnippet (raw.getCodeSnippet());
         f.setCwe         (raw.getCwe());
         f.setCreatedAt   (LocalDateTime.now());
+
+        // CVSS v3.1: store vector and compute base score
+        String vector = raw.getCvssVector();
+        f.setCvssVector(vector);
+        if (vector != null && !vector.isBlank()) {
+            try {
+                f.setCvssScore(CvssCalculator.calculate(CvssVector.parse(vector)));
+            } catch (CvssException e) {
+                System.err.println("CVSS parse failed for vector '" + vector + "': " + e.getMessage());
+            }
+        }
 
         String fingerprint = dedup.generateFingerprint(
             repositoryId,

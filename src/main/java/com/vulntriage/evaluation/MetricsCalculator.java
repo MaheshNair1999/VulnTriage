@@ -27,6 +27,12 @@ public class MetricsCalculator {
 
     public EvaluationReport compute(long evaluationRunId,
                                     LlmResultRepository llmRepo,
+                                    ManualReviewRepository reviewRepo) {
+        return compute(evaluationRunId, llmRepo, reviewRepo, null, null);
+    }
+
+    public EvaluationReport compute(long evaluationRunId,
+                                    LlmResultRepository llmRepo,
                                     ManualReviewRepository reviewRepo,
                                     EvaluationRepository evalRepo) {
         return compute(evaluationRunId, llmRepo, reviewRepo, evalRepo, null);
@@ -101,6 +107,10 @@ public class MetricsCalculator {
         int manualFp = matrix.totalManual(Verdict.FP);
         int fpCorrect = matrix.get(Verdict.FP, Verdict.FP);
         report.setFpAgreement(manualFp > 0 ? (double) fpCorrect / manualFp : 0.0);
+
+        // ── FP Rate — manual FPs wrongly escalated as TP by LLM ─────────
+        int fpEscalated = matrix.get(Verdict.FP, Verdict.TP);
+        report.setFalsePositiveRate(manualFp > 0 ? (double) fpEscalated / manualFp : 0.0);
 
         // ── REVIEW Agreement ──────────────────────────────────────────────
         int manualRev = matrix.totalManual(Verdict.REVIEW);
