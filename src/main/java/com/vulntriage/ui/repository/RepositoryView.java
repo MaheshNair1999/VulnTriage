@@ -22,7 +22,6 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
-import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.*;
 import javafx.stage.DirectoryChooser;
@@ -136,10 +135,10 @@ public class RepositoryView {
         table.getSelectionModel().setSelectionMode(javafx.scene.control.SelectionMode.MULTIPLE);
         VBox.setVgrow(table, Priority.ALWAYS);
 
-        TableColumn<RepositoryRow, String> nameCol = col("Name",         "name",        180);
-        TableColumn<RepositoryRow, String> pathCol = col("Local Path",   "localPath",   300);
-        TableColumn<RepositoryRow, String> scanCol = col("Last Scanned", "lastScanned", 160);
-        TableColumn<RepositoryRow, String> cntCol  = col("Findings",     "findingCount", 80);
+        TableColumn<RepositoryRow, String> nameCol = col("Name",         180, r -> new javafx.beans.property.ReadOnlyStringWrapper(r.getValue().getName()));
+        TableColumn<RepositoryRow, String> pathCol = col("Local Path",   300, r -> new javafx.beans.property.ReadOnlyStringWrapper(r.getValue().getLocalPath()));
+        TableColumn<RepositoryRow, String> scanCol = col("Last Scanned", 160, r -> new javafx.beans.property.ReadOnlyStringWrapper(r.getValue().getLastScanned()));
+        TableColumn<RepositoryRow, String> cntCol  = col("Findings",      80, r -> new javafx.beans.property.ReadOnlyStringWrapper(r.getValue().getFindingCount()));
         table.getColumns().addAll(nameCol, pathCol, scanCol, cntCol);
 
         table.setOnKeyPressed(event -> {
@@ -621,9 +620,12 @@ public class RepositoryView {
         alert.showAndWait();
     }
 
-    private <T> TableColumn<RepositoryRow, T> col(String title, String property, int w) {
-        TableColumn<RepositoryRow, T> col = new TableColumn<>(title);
-        col.setCellValueFactory(new PropertyValueFactory<>(property));
+    private TableColumn<RepositoryRow, String> col(
+            String title, int w,
+            javafx.util.Callback<javafx.scene.control.TableColumn.CellDataFeatures<RepositoryRow, String>,
+                                 javafx.beans.value.ObservableValue<String>> factory) {
+        TableColumn<RepositoryRow, String> col = new TableColumn<>(title);
+        col.setCellValueFactory(factory);
         col.setPrefWidth(w);
         return col;
     }
