@@ -192,7 +192,7 @@ src/main/java/com/vulntriage/
 mvn test
 ```
 
-162 tests covering all backend layers (evaluation metrics, scanners, triage, pipeline integration, CVSS, caching decorator, Command pattern, parallel scan coordinator, filter rules, sampling, workflow, and repository). UI is tested manually by running the app.
+225 tests covering all backend layers (evaluation metrics, CVSS scoring, caching decorator, Command pattern/undo, parallel scan coordinator, pipeline integration, scanners, triage, filter rules, sampling, workflow, and repository). UI is tested manually by running the app.
 
 ---
 
