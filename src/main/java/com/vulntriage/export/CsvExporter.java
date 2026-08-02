@@ -10,9 +10,7 @@ import com.vulntriage.repository.api.ManualReviewRepository;
 import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * Exports triage results as a CSV file — one row per finding.
@@ -31,25 +29,23 @@ public class CsvExporter {
                        FindingRepository findingRepo,
                        String filePath) throws Exception {
 
-        List<LlmResult> llmResults = llmRepo.findByEvaluationRunId(evaluationRunId);
-
-        // Index manual reviews by finding ID
-        Map<Long, ManualReview> reviewMap = reviewRepo.findAll().stream()
-            .collect(Collectors.toMap(ManualReview::getFindingId, r -> r));
+        // Use latest LLM result per finding (same approach as HTML report and MetricsCalculator)
+        // rather than filtering by evaluation run ID, which would miss findings from earlier runs.
+        List<ManualReview> reviews = reviewRepo.findAll();
 
         try (PrintWriter pw = new PrintWriter(new FileWriter(filePath))) {
             // Header
             pw.println("finding_id,rule_id,file_path,line_number,severity,category,"
                 + "manual_verdict,llm_verdict,llm_confidence,llm_reasoning");
 
-            for (LlmResult llm : llmResults) {
-                Optional<Finding> findingOpt = findingRepo.findById(llm.getFindingId());
+            for (ManualReview review : reviews) {
+                Optional<LlmResult> llmOpt = llmRepo.findByFindingId(review.getFindingId());
+                if (llmOpt.isEmpty()) continue;
+                LlmResult llm = llmOpt.get();
+
+                Optional<Finding> findingOpt = findingRepo.findById(review.getFindingId());
                 if (findingOpt.isEmpty()) continue;
                 Finding f = findingOpt.get();
-
-                String manualVerdict = "—";
-                ManualReview review = reviewMap.get(llm.getFindingId());
-                if (review != null) manualVerdict = review.getVerdict().name();
 
                 pw.printf("%d,%s,%s,%s,%s,%s,%s,%s,%d,%s%n",
                     f.getId(),
@@ -58,7 +54,7 @@ public class CsvExporter {
                     f.getLineNumber() != null ? f.getLineNumber() : "",
                     f.getSeverity()   != null ? f.getSeverity().name() : "",
                     csv(f.getCategory()),
-                    manualVerdict,
+                    review.getVerdict().name(),
                     llm.getLlmVerdict().name(),
                     llm.getConfidence(),
                     csv(llm.getReasoning())
