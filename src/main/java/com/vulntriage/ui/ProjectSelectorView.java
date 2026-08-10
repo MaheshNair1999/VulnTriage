@@ -36,7 +36,18 @@ public class ProjectSelectorView {
     private static final String BLUE  = "#1D4ED8";
     private static final String MONO  = "Courier New";
 
-    private static final Path PROJECTS_DIR = Paths.get("projects");
+    private static final Path PROJECTS_DIR = resolveProjectsDir();
+
+    private static Path resolveProjectsDir() {
+        try {
+            // Jar lives at <install>/app/vulntriage-1.0.0.jar — go up two levels to get install dir
+            Path jar = Path.of(ProjectSelectorView.class
+                .getProtectionDomain().getCodeSource().getLocation().toURI());
+            return jar.getParent().getParent().resolve("projects");
+        } catch (Exception e) {
+            return Paths.get("projects");
+        }
+    }
     private static final DateTimeFormatter FMT =
         DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm");
 
@@ -103,16 +114,16 @@ public class ProjectSelectorView {
             + "-fx-text-fill: #9CA3AF; -fx-letter-spacing: 0.5px;");
 
         projectList = new VBox(8);
+        projectList.setFillWidth(true);
 
-        ScrollPane scroll = new ScrollPane(projectList);
-        scroll.setFitToWidth(true);
-        scroll.setStyle("-fx-background: " + BG + "; -fx-background-color: " + BG + "; "
-            + "-fx-border-color: transparent;");
-        VBox.setVgrow(scroll, Priority.ALWAYS);
+        StackPane listWrap = new StackPane(projectList);
+        listWrap.setStyle("-fx-background-color: " + BG + ";");
+        StackPane.setAlignment(projectList, Pos.TOP_LEFT);
+        VBox.setVgrow(listWrap, Priority.ALWAYS);
 
         refreshProjectList();
 
-        content.getChildren().addAll(actions, listLabel, scroll);
+        content.getChildren().addAll(actions, listLabel, listWrap);
         return content;
     }
 
@@ -134,18 +145,11 @@ public class ProjectSelectorView {
     }
 
     private Node buildProjectCard(Path db) {
-        HBox card = new HBox(14);
-        card.setPadding(new Insets(14, 18, 14, 18));
-        card.setAlignment(Pos.CENTER_LEFT);
-        applyCardStyle(card, false);
+        String name = db.getFileName().toString().replace(".db", "");
 
         Label icon = new Label("◈");
         icon.setStyle("-fx-font-size: 20px; -fx-text-fill: " + BLUE + ";");
 
-        VBox info = new VBox(3);
-        HBox.setHgrow(info, Priority.ALWAYS);
-
-        String name = db.getFileName().toString().replace(".db", "");
         Label nameLabel = new Label(name);
         nameLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
 
@@ -153,7 +157,30 @@ public class ProjectSelectorView {
         metaLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED
             + "; -fx-font-family: '" + MONO + "';");
 
-        info.getChildren().addAll(nameLabel, metaLabel);
+        VBox info = new VBox(3, nameLabel, metaLabel);
+
+        HBox graphic = new HBox(14, icon, info);
+        graphic.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(info, Priority.ALWAYS);
+        graphic.setMaxWidth(Double.MAX_VALUE);
+
+        // Main clickable button — most reliable event handling in JavaFX
+        Button openBtn = new Button();
+        openBtn.setGraphic(graphic);
+        openBtn.setMaxWidth(Double.MAX_VALUE);
+        openBtn.setStyle("-fx-background-color: white; -fx-background-radius: 9; "
+            + "-fx-border-color: #E5E7EB; -fx-border-radius: 9; "
+            + "-fx-padding: 14 18; -fx-cursor: hand; -fx-alignment: CENTER-LEFT;");
+        openBtn.setOnAction(e -> onProjectSelected.accept(db.toAbsolutePath()));
+        openBtn.setOnMouseEntered(e -> openBtn.setStyle(
+            "-fx-background-color: #F8FAFC; -fx-background-radius: 9; "
+            + "-fx-border-color: " + BLUE + "; -fx-border-radius: 9; "
+            + "-fx-padding: 14 18; -fx-cursor: hand; -fx-alignment: CENTER-LEFT;"));
+        openBtn.setOnMouseExited(e -> openBtn.setStyle(
+            "-fx-background-color: white; -fx-background-radius: 9; "
+            + "-fx-border-color: #E5E7EB; -fx-border-radius: 9; "
+            + "-fx-padding: 14 18; -fx-cursor: hand; -fx-alignment: CENTER-LEFT;"));
+        HBox.setHgrow(openBtn, Priority.ALWAYS);
 
         Button deleteBtn = new Button("Delete");
         deleteBtn.setMinWidth(Region.USE_PREF_SIZE);
@@ -161,8 +188,6 @@ public class ProjectSelectorView {
             + "-fx-font-size: 12px; -fx-font-weight: bold; -fx-background-radius: 7; "
             + "-fx-border-color: #FECACA; -fx-border-radius: 7; "
             + "-fx-padding: 8 12; -fx-cursor: hand;");
-        deleteBtn.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_CLICKED,
-            javafx.event.Event::consume);
         deleteBtn.setOnAction(e -> {
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "Permanently delete project \"" + name + "\"?\n\n"
@@ -173,25 +198,17 @@ public class ProjectSelectorView {
             confirm.setHeaderText("Delete \"" + name + "\"?");
             confirm.showAndWait().ifPresent(btn -> {
                 if (btn == ButtonType.YES) {
-                    try {
-                        Files.deleteIfExists(db);
-                    } catch (Exception ex) {
-                        new Alert(Alert.AlertType.ERROR,
-                            "Could not delete file:\n" + ex.getMessage())
-                            .showAndWait();
+                    try { Files.deleteIfExists(db); } catch (Exception ex) {
+                        new Alert(Alert.AlertType.ERROR, "Could not delete:\n" + ex.getMessage()).showAndWait();
                     }
                     refreshProjectList();
                 }
             });
         });
 
-        card.getChildren().addAll(icon, info, deleteBtn);
-
-        card.setOnMouseEntered(e -> applyCardStyle(card, true));
-        card.setOnMouseExited(e  -> applyCardStyle(card, false));
-        card.setOnMouseClicked(e -> onProjectSelected.accept(db.toAbsolutePath()));
-
-        return card;
+        HBox row = new HBox(8, openBtn, deleteBtn);
+        row.setAlignment(Pos.CENTER_LEFT);
+        return row;
     }
 
     // ── Dialogs ────────────────────────────────────────────────────────────
@@ -286,10 +303,4 @@ public class ProjectSelectorView {
         }
     }
 
-    private void applyCardStyle(HBox card, boolean hovered) {
-        card.setStyle("-fx-background-color: " + (hovered ? "#F8FAFC" : CARD) + "; "
-            + "-fx-background-radius: 9; "
-            + "-fx-border-color: " + (hovered ? BLUE : "#E5E7EB") + "; "
-            + "-fx-border-radius: 9; -fx-cursor: hand;");
-    }
 }
