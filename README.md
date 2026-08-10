@@ -13,8 +13,11 @@ Built with Java 17, JavaFX 21, SQLite, and Ollama.
 
 ## Quick Start — Windows (No Java Required)
 
-Download **VulnTriage.zip** from this repository, extract it, and run `VulnTriage.exe` directly.
-The zip is a self-contained Windows app bundle — Java, JavaFX, and all dependencies are already included.
+Download **VulnTriage.zip** from this repository and extract it.
+Inside the extracted folder, double-click **VulnTriage.vbs** to launch the application.
+(`VulnTriage-run.bat` is the underlying launcher used by the VBS — keep both files in the same folder.)
+
+The bundle is self-contained — Java, JavaFX, and all dependencies are included.
 You only need **Ollama** (for LLM triage) and the scanners you want to use (Semgrep, Trivy, etc.).
 
 ---
