@@ -26,10 +26,32 @@ public class HtmlReportExporter {
             List<Finding> findings,
             Map<Long, ManualReview> reviewsByFindingId,
             Map<Long, LlmResult>   llmByFindingId,
+            List<LlmResult>        allLlmResults,
             String outputPath) throws IOException {
 
-        String html = buildHtml(runName, report, findings, reviewsByFindingId, llmByFindingId);
+        String html = buildHtml(runName, report, findings, reviewsByFindingId, llmByFindingId, allLlmResults);
         Files.writeString(Path.of(outputPath), html, StandardCharsets.UTF_8);
+    }
+
+    private record VerMetrics(int tpTp, int tpTotal, int fpFp, int fpTotal, int predTp, int total) {
+        double tpRecall()    { return tpTotal > 0 ? (double) tpTp / tpTotal : 0; }
+        double fpAgreement() { return fpTotal > 0 ? (double) fpFp / fpTotal : 0; }
+        double tpPrecision() { return predTp  > 0 ? (double) tpTp / predTp  : 0; }
+    }
+
+    private VerMetrics computeVerMetrics(List<LlmResult> results, Map<Long, ManualReview> reviewMap) {
+        Map<Long, LlmResult> deduped = new java.util.LinkedHashMap<>();
+        for (LlmResult lr : results)
+            deduped.merge(lr.getFindingId(), lr, (a, b) -> a.getId() > b.getId() ? a : b);
+        int tpTp = 0, tpTotal = 0, fpFp = 0, fpTotal = 0, predTp = 0;
+        for (LlmResult lr : deduped.values()) {
+            ManualReview mr = reviewMap.get(lr.getFindingId());
+            if (mr == null) continue;
+            if (mr.getVerdict() == Verdict.TP) { tpTotal++; if (lr.getLlmVerdict() == Verdict.TP) tpTp++; }
+            if (mr.getVerdict() == Verdict.FP) { fpTotal++; if (lr.getLlmVerdict() == Verdict.FP) fpFp++; }
+            if (lr.getLlmVerdict() == Verdict.TP) predTp++;
+        }
+        return new VerMetrics(tpTp, tpTotal, fpFp, fpTotal, predTp, deduped.size());
     }
 
     private String buildHtml(
@@ -37,10 +59,10 @@ public class HtmlReportExporter {
             EvaluationReport report,
             List<Finding> findings,
             Map<Long, ManualReview> reviewsByFindingId,
-            Map<Long, LlmResult>   llmByFindingId) {
+            Map<Long, LlmResult>   llmByFindingId,
+            List<LlmResult>        allLlmResults) {
 
         String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm"));
-        ConfusionMatrix m = report.getConfusionMatrix();
 
         StringBuilder sb = new StringBuilder();
         sb.append("""
@@ -192,31 +214,6 @@ public class HtmlReportExporter {
         sb.append(metricCard("REVIEW Agreement",   pct(report.getReviewAgreement()),   "#7C3AED", "LLM used REVIEW on findings the reviewer found uncertain"));
         sb.append("</div></section>\n\n");
 
-        // ── Confusion Matrix ───────────────────────────────────────────────
-        sb.append("<section class=\"section\">");
-        sb.append("<h2 class=\"section-title\">Confusion Matrix</h2>");
-        sb.append("<p style=\"font-size:12px;color:var(--muted);margin-bottom:14px\">Rows = manual reviewer verdict &nbsp;&middot;&nbsp; Columns = LLM verdict</p>");
-        sb.append("<div class=\"matrix-wrap\"><table class=\"matrix\">");
-        sb.append("<tr><th></th><th>LLM: TP</th><th>LLM: FP</th><th>LLM: REVIEW</th><th>Row Total</th></tr>");
-
-        Verdict[] vds = {Verdict.TP, Verdict.FP, Verdict.REVIEW};
-        String[] vdLabels = {"TP", "FP", "REVIEW"};
-        String[] diagClasses = {"diag-tp", "diag-fp", "diag-rv"};
-
-        for (int i = 0; i < vds.length; i++) {
-            sb.append("<tr><th>Manual: ").append(vdLabels[i]).append("</th>");
-            for (int j = 0; j < vds.length; j++) {
-                String cls = (i == j) ? diagClasses[i] : "off";
-                sb.append("<td class=\"").append(cls).append("\">")
-                  .append(m.get(vds[i], vds[j])).append("</td>");
-            }
-            sb.append("<td class=\"total\">").append(m.totalManual(vds[i])).append("</td></tr>");
-        }
-        sb.append("<tr><th>Col Total</th>");
-        for (Verdict v : vds) sb.append("<td class=\"total\">").append(m.totalLlm(v)).append("</td>");
-        sb.append("<td class=\"total\">").append(m.total()).append("</td></tr>");
-        sb.append("</table></div></section>\n\n");
-
         // ── Scanner Summary ────────────────────────────────────────────────
         long totalReviewed = reviewsByFindingId.size();
         long totalLlm      = llmByFindingId.size();
@@ -231,6 +228,9 @@ public class HtmlReportExporter {
             .map(entry -> {
                 ScannerType   type = entry.getKey();
                 List<Finding> sf   = entry.getValue();
+
+                java.util.Set<Long> sfIds = sf.stream()
+                    .map(Finding::getId).collect(Collectors.toSet());
 
                 List<Finding> sfRev = sf.stream()
                     .filter(f -> reviewsByFindingId.containsKey(f.getId()))
@@ -255,13 +255,24 @@ public class HtmlReportExporter {
                 long lFP  = sfLlm.stream().filter(f -> llmByFindingId.get(f.getId()).getLlmVerdict() == Verdict.FP).count();
                 long lRev = sfLlm.stream().filter(f -> llmByFindingId.get(f.getId()).getLlmVerdict() == Verdict.REVIEW).count();
 
+                // Per-version LLM triaged counts (across all runs, deduplicated per finding)
+                java.util.Map<String, java.util.Set<Long>> versionIds = new java.util.LinkedHashMap<>();
+                for (LlmResult lr : allLlmResults) {
+                    if (!sfIds.contains(lr.getFindingId())) continue;
+                    String v = lr.getPromptVersion() != null ? lr.getPromptVersion() : "unknown";
+                    versionIds.computeIfAbsent(v, k -> new java.util.HashSet<>()).add(lr.getFindingId());
+                }
+                String vCountsJson = "[" + versionIds.entrySet().stream()
+                    .map(e -> "{\"v\":\"" + e.getKey() + "\",\"n\":" + e.getValue().size() + "}")
+                    .collect(Collectors.joining(",")) + "]";
+
                 return String.format(
                     "{\"name\":\"%s\",\"color\":\"%s\",\"total\":%d,\"reviewed\":%d,"
-                    + "\"llmTriaged\":%d,\"agreePct\":\"%s\","
+                    + "\"agreePct\":\"%s\",\"versionCounts\":%s,"
                     + "\"mTP\":%d,\"mFP\":%d,\"mREV\":%d,"
                     + "\"lTP\":%d,\"lFP\":%d,\"lREV\":%d}",
                     type.name(), scannerColor(type), sf.size(),
-                    sfRev.size(), sfLlm.size(), aPct,
+                    sfRev.size(), aPct, vCountsJson,
                     mTP, mFP, mRev, lTP, lFP, lRev);
             })
             .collect(Collectors.toList());
@@ -275,7 +286,7 @@ public class HtmlReportExporter {
             sb.append("<select class=\"sc-select\" id=\"sc-sel\" onchange=\"scSwitch(this.value)\"></select>");
         }
         sb.append("</div>");
-        sb.append("<div class=\"metric-row sc-4col\" id=\"sc-cards\"></div>");
+        sb.append("<div id=\"sc-cards\" style=\"display:grid;gap:14px;margin-bottom:0\"></div>");
         sb.append("<div class=\"sc-verdict-row\" id=\"sc-verdicts\"></div>");
         sb.append("<script>\n");
         sb.append("var SC_DATA=").append(scannerJson).append(";\n");
@@ -283,10 +294,14 @@ public class HtmlReportExporter {
         sb.append("  var d=SC_DATA.find(function(s){return s.name===n;});\n");
         sb.append("  if(!d)return;\n");
         sb.append("  function pct(v,t){return t>0?' ('+Math.round(v/t*100)+'%)':''}\n");
+        sb.append("  var cols=2+d.versionCounts.length+1;\n");
+        sb.append("  document.getElementById('sc-cards').style.gridTemplateColumns='repeat('+cols+',1fr)';\n");
+        sb.append("  var vCards='';\n");
+        sb.append("  d.versionCounts.forEach(function(vc){vCards+=scCard(vc.n,'LLM Triaged ('+vc.v+')','Findings processed by '+vc.v,'#D97706');});\n");
         sb.append("  document.getElementById('sc-cards').innerHTML=\n");
         sb.append("    scCard(d.total,'Total Findings','From this scanner in database',d.color)+\n");
         sb.append("    scCard(d.reviewed,'Manually Reviewed','Findings with TP/FP/REVIEW verdict','#059669')+\n");
-        sb.append("    scCard(d.llmTriaged,'LLM Triaged','Findings processed by LLM triage','#D97706')+\n");
+        sb.append("    vCards+\n");
         sb.append("    scCard(d.agreePct,'LLM Agreement','LLM matched manual verdict','#7C3AED');\n");
         sb.append("  document.getElementById('sc-verdicts').innerHTML=\n");
         sb.append("    '<div class=\"sc-vbox\"><div class=\"sc-vbox-title\">Manual Review Verdicts</div>'+\n");
@@ -317,57 +332,131 @@ public class HtmlReportExporter {
         sb.append("</script>\n");
         sb.append("</section>\n\n");
 
+        // ── Version-Based Evaluation ───────────────────────────────────────
+        if (!allLlmResults.isEmpty()) {
+            // Group by prompt version, preserving insertion order
+            java.util.Map<String, List<LlmResult>> byVersion = new java.util.LinkedHashMap<>();
+            for (LlmResult lr : allLlmResults) {
+                String v = lr.getPromptVersion() != null ? lr.getPromptVersion() : "unknown";
+                byVersion.computeIfAbsent(v, k -> new java.util.ArrayList<>()).add(lr);
+            }
+
+            sb.append("<section class=\"section\">");
+            sb.append("<h2 class=\"section-title\">Version-Based Evaluation</h2>");
+            sb.append("<p style=\"font-size:12px;color:var(--muted);margin-bottom:18px\">")
+              .append("Per-prompt-version metrics across all findings triaged by each version</p>");
+
+            for (java.util.Map.Entry<String, List<LlmResult>> entry : byVersion.entrySet()) {
+                VerMetrics vm = computeVerMetrics(entry.getValue(), reviewsByFindingId);
+                ConfusionMatrix cm = computeVerMatrix(entry.getValue(), reviewsByFindingId);
+                sb.append("<div style=\"margin-bottom:32px\">");
+                sb.append("<div style=\"font-size:13px;font-weight:700;color:var(--blue);margin-bottom:10px\">")
+                  .append(esc(entry.getKey()))
+                  .append(" &nbsp;<span style=\"font-weight:400;color:var(--muted);font-size:12px\">(")
+                  .append(vm.total()).append(" findings triaged)</span></div>");
+                sb.append("<div class=\"metric-row\">");
+                sb.append(metricCard("TP Recall",    pct(vm.tpRecall()),    "#059669",
+                    vm.tpTp() + " / " + vm.tpTotal() + " real vulnerabilities caught"));
+                sb.append(metricCard("FP Agreement", pct(vm.fpAgreement()), "#D97706",
+                    vm.fpFp() + " / " + vm.fpTotal() + " false positives agreed"));
+                sb.append(metricCard("TP Precision", pct(vm.tpPrecision()), "#D97706",
+                    vm.tpTp() + " / " + vm.predTp() + " TP predictions correct"));
+                sb.append("</div>");
+                sb.append(matrixHtml(cm));
+                sb.append("</div>");
+            }
+            sb.append("</section>\n\n");
+
+            // ── Total Evaluation ───────────────────────────────────────────
+            VerMetrics total = computeVerMetrics(allLlmResults, reviewsByFindingId);
+            sb.append("<section class=\"section\">");
+            sb.append("<h2 class=\"section-title\">Total Evaluation</h2>");
+            sb.append("<p style=\"font-size:12px;color:var(--muted);margin-bottom:14px\">")
+              .append("Aggregate metrics across all LLM results &mdash; all versions combined, ")
+              .append("latest result per finding</p>");
+            sb.append("<div class=\"metric-row\" style=\"grid-template-columns:repeat(4,1fr)\">");
+            sb.append(metricCard("TP Recall",        pct(total.tpRecall()),    "#059669",
+                total.tpTp() + " / " + total.tpTotal() + " real vulnerabilities caught"));
+            sb.append(metricCard("FP Agreement",     pct(total.fpAgreement()), "#D97706",
+                total.fpFp() + " / " + total.fpTotal() + " false positives agreed"));
+            sb.append(metricCard("TP Precision",     pct(total.tpPrecision()), "#D97706",
+                total.tpTp() + " / " + total.predTp() + " TP predictions correct"));
+            sb.append(metricCard("Findings Triaged", String.valueOf(total.total()), "#1D4ED8",
+                "Unique findings with LLM result and manual review"));
+            sb.append("</div></section>\n\n");
+        }
+
         // ── Findings Table ─────────────────────────────────────────────────
+        // Build per-finding, per-version lookup (keep most-recent result per finding+version)
+        java.util.Map<Long, java.util.Map<String, LlmResult>> verByFinding = new java.util.LinkedHashMap<>();
+        for (LlmResult lr : allLlmResults) {
+            String ver = lr.getPromptVersion() != null ? lr.getPromptVersion() : "unknown";
+            verByFinding
+                .computeIfAbsent(lr.getFindingId(), k -> new java.util.LinkedHashMap<>())
+                .merge(ver, lr, (a, b) -> a.getId() > b.getId() ? a : b);
+        }
+        java.util.List<String> versions = allLlmResults.stream()
+            .map(lr -> lr.getPromptVersion() != null ? lr.getPromptVersion() : "unknown")
+            .distinct().sorted()
+            .collect(Collectors.toList());
+
         sb.append("<section class=\"section\">");
         sb.append("<h2 class=\"section-title\">All Findings</h2>");
         sb.append("<p style=\"font-size:12px;color:var(--muted);margin-bottom:14px\">")
           .append(findings.size()).append(" findings &nbsp;&middot;&nbsp; ")
           .append(totalReviewed).append(" manually reviewed &nbsp;&middot;&nbsp; ")
-          .append(totalLlm).append(" LLM triaged. ")
-          .append("Highlighted rows indicate a verdict mismatch between manual and LLM.</p>");
+          .append(totalLlm).append(" LLM triaged");
+        if (versions.size() > 1)
+            sb.append(" across ").append(versions.size()).append(" prompt versions");
+        sb.append(". Highlighted rows indicate a verdict mismatch on at least one version.</p>");
+
         sb.append("<div class=\"overflow-x\"><table class=\"findings-table\">");
         sb.append("<thead><tr>")
           .append("<th>#</th><th>Scanner</th><th>Severity</th><th>Rule ID</th>")
-          .append("<th>File / Line</th><th>Manual Verdict</th>")
-          .append("<th>LLM Verdict</th><th>Confidence</th><th>Match</th>")
-          .append("</tr></thead><tbody>");
+          .append("<th>File / Line</th><th>Manual Verdict</th>");
+        for (String ver : versions)
+            sb.append("<th>").append(esc(ver)).append("</th>");
+        sb.append("</tr></thead><tbody>");
 
         int rowNum = 1;
         for (Finding f : findings) {
-            ManualReview rev = reviewsByFindingId.get(f.getId());
-            LlmResult    llm = llmByFindingId.get(f.getId());
+            ManualReview rev    = reviewsByFindingId.get(f.getId());
+            java.util.Map<String, LlmResult> verMap =
+                verByFinding.getOrDefault(f.getId(), java.util.Map.of());
 
-            boolean hasReview = rev != null;
-            boolean hasLlm    = llm != null;
-            boolean mismatch  = hasReview && hasLlm && rev.getVerdict() != llm.getLlmVerdict();
+            boolean anyMismatch = rev != null && verMap.values().stream()
+                .anyMatch(lr -> lr.getLlmVerdict() != rev.getVerdict());
 
-            String rowClass = mismatch ? " class=\"mismatch\"" : "";
-            sb.append("<tr").append(rowClass).append(">");
+            sb.append("<tr").append(anyMismatch ? " class=\"mismatch\"" : "").append(">");
 
-            // #
             sb.append("<td class=\"num\">").append(rowNum++).append("</td>");
-            // Scanner
             sb.append("<td>").append(scannerBadge(f.getSource() != null ? f.getSource().name() : "")).append("</td>");
-            // Severity
             sb.append("<td>").append(severityBadge(f.getSeverity() != null ? f.getSeverity().name() : "INFO")).append("</td>");
-            // Rule ID
             sb.append("<td class=\"mono\">").append(esc(truncate(f.getRuleId(), 40))).append("</td>");
-            // File / Line
             String fileLine = f.getFilePath() != null ? shortPath(f.getFilePath()) : "";
             if (f.getLineNumber() != null) fileLine += ":" + f.getLineNumber();
             sb.append("<td class=\"mono file-cell\">").append(esc(fileLine)).append("</td>");
-            // Manual Verdict
-            sb.append("<td>").append(hasReview ? verdictBadge(rev.getVerdict()) : "<span class=\"badge badge-none\">&mdash;</span>").append("</td>");
-            // LLM Verdict
-            sb.append("<td>").append(hasLlm ? verdictBadge(llm.getLlmVerdict()) : "<span class=\"badge badge-none\">&mdash;</span>").append("</td>");
-            // Confidence
-            String conf = hasLlm ? llm.getConfidence() + "%" : "&mdash;";
-            sb.append("<td class=\"conf\">").append(conf).append("</td>");
-            // Match
-            String matchIcon = !hasReview || !hasLlm ? "<span class=\"match-na\">&mdash;</span>"
-                : mismatch ? "<span class=\"match-no\">&#x2717;</span>"
-                           : "<span class=\"match-ok\">&#x2713;</span>";
-            sb.append("<td style=\"text-align:center\">").append(matchIcon).append("</td>");
+            sb.append("<td>")
+              .append(rev != null ? verdictBadge(rev.getVerdict())
+                                  : "<span class=\"badge badge-none\">&mdash;</span>")
+              .append("</td>");
+
+            for (String ver : versions) {
+                LlmResult vr = verMap.get(ver);
+                if (vr == null) {
+                    sb.append("<td><span class=\"badge badge-none\">&mdash;</span></td>");
+                } else {
+                    boolean match = rev != null && vr.getLlmVerdict() == rev.getVerdict();
+                    String indicator = rev == null ? ""
+                        : match ? " <span class=\"match-ok\" style=\"font-size:11px\">&#x2713;</span>"
+                                : " <span class=\"match-no\" style=\"font-size:11px\">&#x2717;</span>";
+                    sb.append("<td>")
+                      .append(verdictBadge(vr.getLlmVerdict()))
+                      .append(indicator)
+                      .append(" <span class=\"conf\">").append(vr.getConfidence()).append("%</span>")
+                      .append("</td>");
+                }
+            }
 
             sb.append("</tr>\n");
         }
@@ -382,6 +471,44 @@ public class HtmlReportExporter {
           .append("</footer>");
 
         sb.append("\n</div></body></html>");
+        return sb.toString();
+    }
+
+    private ConfusionMatrix computeVerMatrix(List<LlmResult> results, Map<Long, ManualReview> reviewMap) {
+        Map<Long, LlmResult> deduped = new java.util.LinkedHashMap<>();
+        for (LlmResult lr : results)
+            deduped.merge(lr.getFindingId(), lr, (a, b) -> a.getId() > b.getId() ? a : b);
+        ConfusionMatrix matrix = new ConfusionMatrix();
+        for (LlmResult lr : deduped.values()) {
+            ManualReview mr = reviewMap.get(lr.getFindingId());
+            if (mr == null) continue;
+            matrix.increment(mr.getVerdict(), lr.getLlmVerdict());
+        }
+        return matrix;
+    }
+
+    private String matrixHtml(ConfusionMatrix cm) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<p style=\"font-size:11px;color:var(--muted);margin:12px 0 6px;font-style:italic\">")
+          .append("Confusion matrix &nbsp;&middot;&nbsp; Rows = manual verdict &nbsp;&middot;&nbsp; Columns = LLM verdict</p>");
+        sb.append("<div class=\"matrix-wrap\"><table class=\"matrix\">");
+        sb.append("<tr><th></th><th>LLM: TP</th><th>LLM: FP</th><th>LLM: REVIEW</th><th>Row Total</th></tr>");
+        Verdict[] vds = {Verdict.TP, Verdict.FP, Verdict.REVIEW};
+        String[] vdLabels = {"TP", "FP", "REVIEW"};
+        String[] diagClasses = {"diag-tp", "diag-fp", "diag-rv"};
+        for (int i = 0; i < vds.length; i++) {
+            sb.append("<tr><th>Manual: ").append(vdLabels[i]).append("</th>");
+            for (int j = 0; j < vds.length; j++) {
+                String cls = (i == j) ? diagClasses[i] : "off";
+                sb.append("<td class=\"").append(cls).append("\">")
+                  .append(cm.get(vds[i], vds[j])).append("</td>");
+            }
+            sb.append("<td class=\"total\">").append(cm.totalManual(vds[i])).append("</td></tr>");
+        }
+        sb.append("<tr><th>Col Total</th>");
+        for (Verdict v : vds) sb.append("<td class=\"total\">").append(cm.totalLlm(v)).append("</td>");
+        sb.append("<td class=\"total\">").append(cm.total()).append("</td></tr>");
+        sb.append("</table></div>");
         return sb.toString();
     }
 

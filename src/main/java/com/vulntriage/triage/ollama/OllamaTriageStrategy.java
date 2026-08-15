@@ -54,11 +54,43 @@ public class OllamaTriageStrategy implements TriageStrategy {
     @Override
     public TriageResult triage(Finding finding) {
         String prompt = promptBuilder.build(finding);
+        return runWithRetry(finding, prompt, PromptBuilder.PROMPT_VERSION);
+    }
 
+    /**
+     * Context-enriched triage (v2.0): injects the full source file into the prompt
+     * so the model can reason about framework mitigations, access control, and
+     * variable provenance beyond the 7-line snippet.
+     *
+     * @param finding         the finding to triage
+     * @param fullFileContent the complete source file containing the flagged line
+     * @return triage result tagged with prompt version v2.0
+     */
+    public TriageResult triageWithContext(Finding finding, String fullFileContent) {
+        String prompt = promptBuilder.buildV2(finding, fullFileContent);
+        return runWithRetry(finding, prompt, PromptBuilder.PROMPT_VERSION_V2);
+    }
+
+    /**
+     * Triage using an arbitrary stored prompt template.
+     *
+     * @param finding        the finding to triage
+     * @param templateStr    the raw template string (may contain {{placeholders}})
+     * @param promptVersion  the version label to tag the result with (e.g. "v3.0")
+     * @param sourceContext  wider file context for {{source_context}}; null if not needed
+     * @return triage result tagged with the given promptVersion
+     */
+    public TriageResult triageWithTemplate(Finding finding, String templateStr,
+                                           String promptVersion, String sourceContext) {
+        String prompt = promptBuilder.buildFromTemplate(finding, templateStr, sourceContext);
+        return runWithRetry(finding, prompt, promptVersion);
+    }
+
+    private TriageResult runWithRetry(Finding finding, String prompt, String promptVersion) {
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 String rawResponse = client.generate(prompt, TIMEOUT_SECONDS);
-                TriageResult result = responseParser.parse(rawResponse, PromptBuilder.PROMPT_VERSION);
+                TriageResult result = responseParser.parse(rawResponse, promptVersion);
                 log.debug("Triage success (attempt {}): finding={}, verdict={}, confidence={}",
                     attempt, finding.getId(), result.getVerdict(), result.getConfidence());
                 return result;
@@ -70,12 +102,9 @@ public class OllamaTriageStrategy implements TriageStrategy {
                     throw e;
                 }
                 log.warn("Triage attempt {} failed, retrying: {}", attempt, e.getMessage());
-                // Add strict JSON reminder on retry
                 prompt = addJsonReminder(prompt);
             }
         }
-
-        // Unreachable — loop always returns or throws
         throw new TriageException("Triage failed unexpectedly");
     }
 

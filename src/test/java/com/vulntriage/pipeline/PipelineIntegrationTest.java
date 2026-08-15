@@ -363,6 +363,15 @@ class PipelineIntegrationTest {
         @Override public void deleteByFindingId(long findingId) {
             store.entrySet().removeIf(e -> e.getValue().getFindingId() == findingId);
         }
+        @Override public void deleteByFindingIdAndRunId(long findingId, long runId) {
+            store.entrySet().removeIf(e -> e.getValue().getFindingId() == findingId && e.getValue().getEvaluationRunId() == runId);
+        }
+        @Override public List<com.vulntriage.domain.LlmResult> findAllByPromptVersion(String v) {
+            return store.values().stream().filter(r -> v.equals(r.getPromptVersion())).toList();
+        }
+        @Override public List<com.vulntriage.domain.LlmResult> findAll() {
+            return new java.util.ArrayList<>(store.values());
+        }
     }
 
     static class InMemoryEvaluationRepository implements EvaluationRepository {

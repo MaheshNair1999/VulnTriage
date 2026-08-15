@@ -113,6 +113,9 @@ class MetricsCalculatorTest {
             public boolean existsByFindingId(long findingId) { return results.stream().anyMatch(r -> r.getFindingId() == findingId); }
             public Optional<LlmResult> findByFindingId(long findingId) { return results.stream().filter(r -> r.getFindingId() == findingId).findFirst(); }
             public void deleteByFindingId(long findingId) {}
+            public void deleteByFindingIdAndRunId(long findingId, long runId) {}
+            public List<LlmResult> findAllByPromptVersion(String v) { return results.stream().filter(r -> v.equals(r.getPromptVersion())).toList(); }
+            public List<LlmResult> findAll() { return new java.util.ArrayList<>(results); }
         };
     }
 

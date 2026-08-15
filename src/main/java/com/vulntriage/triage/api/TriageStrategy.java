@@ -30,4 +30,14 @@ public interface TriageStrategy {
 
     /** Check whether the backend is reachable before starting a batch triage. */
     boolean isAvailable();
+
+    /**
+     * Triage using an explicit prompt template string.
+     * Default falls back to {@link #triage(Finding)} so mock/stub strategies
+     * work without needing a prompt template.
+     */
+    default TriageResult triageWithTemplate(Finding finding, String templateStr,
+                                            String promptVersion, String sourceContext) {
+        return triage(finding);
+    }
 }

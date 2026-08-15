@@ -29,6 +29,9 @@ public class SemgrepAdapter implements ScannerAdapter {
 
     private final SemgrepOutputParser parser;
 
+    // Cached after first resolution so `where`/`which` only runs once per instance
+    private String resolvedSemgrepPath = null;
+
     public SemgrepAdapter() {
         this.parser = new SemgrepOutputParser();
     }
@@ -40,12 +43,8 @@ public class SemgrepAdapter implements ScannerAdapter {
 
     @Override
     public List<RawFinding> scan(String repositoryPath, ScanConfig config) {
-        if (!isAvailable()) {
-            throw new ScannerException(
-                "Semgrep is not installed or not on the system PATH. " +
-                "Install it from https://semgrep.dev and try again.");
-        }
-
+        // isAvailable() is already checked by ScanStage before calling scan() --
+        // skip the redundant check here to avoid a second cold-start penalty.
         log.info("Starting Semgrep scan: path={}, ruleset={}",
             repositoryPath, config.getSemgrepRuleset());
 
@@ -125,28 +124,29 @@ public class SemgrepAdapter implements ScannerAdapter {
     public boolean isAvailable() {
         try {
             // On Windows, ProcessBuilder does not always inherit the full user PATH
-            // (e.g. when launched from IntelliJ). We resolve the executable explicitly
-            // using `where` (Windows) or `which` (Unix) before falling back to bare name.
-            String semgrepPath = resolveExecutable("semgrep");
+            // (e.g. when launched from IntelliJ). We resolve the executable once and
+            // cache the result so subsequent calls (scan, buildCommand) don't re-run `where`.
+            String semgrepPath = semgrepPath();
             Process p = new ProcessBuilder(semgrepPath, "--version")
                 .redirectErrorStream(true)
                 .start();
-            return p.waitFor(5, TimeUnit.SECONDS) && p.exitValue() == 0;
+            // 30-second timeout: Semgrep's Python/uv runtime can take 6-10 s on cold start
+            // (first launch after install or after a long idle). 5 s was too short and caused
+            // isAvailable() to return false on the first scan, silently skipping it.
+            return p.waitFor(30, TimeUnit.SECONDS) && p.exitValue() == 0;
         } catch (Exception e) {
             return false;
         }
     }
 
-    /**
-     * Resolve the full path to an executable using the OS path-lookup command.
-     * Falls back to the bare name if resolution fails (Unix systems rarely need this).
-     */
-    private String resolveExecutable(String name) {
+    /** Returns the resolved semgrep path, computing it once and caching the result. */
+    private synchronized String semgrepPath() {
+        if (resolvedSemgrepPath != null) return resolvedSemgrepPath;
         try {
             boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
             ProcessBuilder pb = isWindows
-                ? new ProcessBuilder("where", name)
-                : new ProcessBuilder("which", name);
+                ? new ProcessBuilder("where", "semgrep")
+                : new ProcessBuilder("which", "semgrep");
             pb.redirectErrorStream(true);
             Process p = pb.start();
             if (p.waitFor(15, TimeUnit.SECONDS) && p.exitValue() == 0) {
@@ -154,17 +154,19 @@ public class SemgrepAdapter implements ScannerAdapter {
                         new InputStreamReader(p.getInputStream()))) {
                     String line = reader.readLine();
                     if (line != null && !line.isBlank()) {
-                        return line.trim(); // e.g. C:\Users\mahes\AppData\Local\...
+                        resolvedSemgrepPath = line.trim();
+                        return resolvedSemgrepPath;
                     }
                 }
             }
         } catch (Exception ignored) {}
-        return name; // fall back to bare name
+        resolvedSemgrepPath = "semgrep"; // fall back to bare name
+        return resolvedSemgrepPath;
     }
 
     private List<String> buildCommand(String repositoryPath, ScanConfig config) {
         List<String> cmd = new ArrayList<>();
-        cmd.add(resolveExecutable("semgrep"));
+        cmd.add(semgrepPath());
         cmd.add("scan");
         cmd.add("--config");
         cmd.add(config.getSemgrepRuleset());

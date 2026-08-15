@@ -3,7 +3,9 @@ package com.vulntriage.app;
 import com.vulntriage.config.AppConfig;
 import com.vulntriage.repository.CachingFindingRepository;
 import com.vulntriage.repository.api.WorkflowRepository;
+import com.vulntriage.repository.api.PromptTemplateRepository;
 import com.vulntriage.repository.sqlite.SQLiteWorkflowRepository;
+import com.vulntriage.repository.sqlite.SQLitePromptTemplateRepository;
 import com.vulntriage.repository.api.*;
 import com.vulntriage.repository.sqlite.*;
 import com.vulntriage.triage.api.TriageStrategy;
@@ -26,13 +28,14 @@ public class AppContext {
     private static AppContext instance;
 
     // ── Repositories ───────────────────────────────────────────────────────
-    private final RepositoryRepo         repositoryRepo;
-    private final FindingRepository      findingRepo;
-    private final ScanRunRepository      scanRunRepo;
-    private final ManualReviewRepository reviewRepo;
-    private final LlmResultRepository    llmRepo;
-    private final EvaluationRepository   evalRepo;
-    private final WorkflowRepository      workflowRepo;
+    private final RepositoryRepo           repositoryRepo;
+    private final FindingRepository        findingRepo;
+    private final ScanRunRepository        scanRunRepo;
+    private final ManualReviewRepository   reviewRepo;
+    private final LlmResultRepository      llmRepo;
+    private final EvaluationRepository     evalRepo;
+    private final WorkflowRepository       workflowRepo;
+    private final PromptTemplateRepository promptTemplateRepo;
 
     // ── Services ───────────────────────────────────────────────────────────
     private TriageStrategy triageStrategy;
@@ -42,13 +45,14 @@ public class AppContext {
     private String ollamaModel;
 
     private AppContext() {
-        repositoryRepo = new SQLiteRepositoryRepo();
-        findingRepo    = new CachingFindingRepository(new SQLiteFindingRepository());
-        scanRunRepo    = new SQLiteScanRunRepository();
-        reviewRepo     = new SQLiteManualReviewRepository();
-        llmRepo        = new SQLiteLlmResultRepository();
-        evalRepo       = new SQLiteEvaluationRepository();
-        workflowRepo   = new SQLiteWorkflowRepository();
+        repositoryRepo     = new SQLiteRepositoryRepo();
+        findingRepo        = new CachingFindingRepository(new SQLiteFindingRepository());
+        scanRunRepo        = new SQLiteScanRunRepository();
+        reviewRepo         = new SQLiteManualReviewRepository();
+        llmRepo            = new SQLiteLlmResultRepository();
+        evalRepo           = new SQLiteEvaluationRepository();
+        workflowRepo       = new SQLiteWorkflowRepository();
+        promptTemplateRepo = new SQLitePromptTemplateRepository();
         triageStrategy = new MockTriageStrategy(); // safe default — switch to Ollama in Settings
 
         // Load persisted settings
@@ -73,13 +77,14 @@ public class AppContext {
 
     // ── Repository accessors ───────────────────────────────────────────────
 
-    public RepositoryRepo         repositoryRepo() { return repositoryRepo; }
-    public FindingRepository      findingRepo()    { return findingRepo; }
-    public ScanRunRepository      scanRunRepo()    { return scanRunRepo; }
-    public ManualReviewRepository reviewRepo()     { return reviewRepo; }
-    public LlmResultRepository    llmRepo()        { return llmRepo; }
-    public EvaluationRepository   evalRepo()       { return evalRepo; }
-    public WorkflowRepository      workflowRepo()   { return workflowRepo; }
+    public RepositoryRepo           repositoryRepo()     { return repositoryRepo; }
+    public FindingRepository        findingRepo()        { return findingRepo; }
+    public ScanRunRepository        scanRunRepo()        { return scanRunRepo; }
+    public ManualReviewRepository   reviewRepo()         { return reviewRepo; }
+    public LlmResultRepository      llmRepo()            { return llmRepo; }
+    public EvaluationRepository     evalRepo()           { return evalRepo; }
+    public WorkflowRepository       workflowRepo()       { return workflowRepo; }
+    public PromptTemplateRepository promptTemplateRepo() { return promptTemplateRepo; }
 
     // ── Triage strategy ────────────────────────────────────────────────────
 
@@ -87,10 +92,11 @@ public class AppContext {
 
     /** Switch to real Ollama — called from Settings screen */
     public void enableOllama(String url, String model) {
-        this.ollamaUrl   = url;
+        String cleanUrl = url.endsWith("/") ? url.replaceAll("/+$", "") : url;
+        this.ollamaUrl   = cleanUrl;
         this.ollamaModel = model;
-        this.triageStrategy = new OllamaTriageStrategy(url, model);
-        AppConfig.getInstance().saveOllamaSettings(url, model);
+        this.triageStrategy = new OllamaTriageStrategy(cleanUrl, model);
+        AppConfig.getInstance().saveOllamaSettings(cleanUrl, model);
     }
 
     /** Switch back to mock — useful during development/testing */

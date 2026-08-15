@@ -55,6 +55,9 @@ public class EvaluationView {
     private VBox               metricsArea;
     private VBox               matrixArea;
     private VBox               scannerArea;
+    private VBox               compareArea;
+    private VBox               versionArea;
+    private VBox               totalArea;
     private Label              statusLabel;
     private String             selectedScanner = "All Scanners";
     private long               currentRunId    = -1;
@@ -125,8 +128,18 @@ public class EvaluationView {
         metricsArea  = new VBox(16);
         matrixArea   = new VBox(12);
         scannerArea  = new VBox(12);
+        compareArea  = new VBox(12);
+        versionArea  = new VBox(16);
+        totalArea    = new VBox(16);
 
-        body.getChildren().addAll(statusLabel, metricsArea, matrixArea, scannerArea);
+        body.getChildren().addAll(statusLabel, metricsArea, scannerArea, compareArea, versionArea, totalArea);
+
+        // Auto-render version comparison and evaluations whenever data is available
+        javafx.application.Platform.runLater(() -> {
+            renderVersionComparison();
+            renderVersionBreakdown();
+            renderTotalEvaluation();
+        });
 
         ScrollPane scroll = new ScrollPane(body);
         scroll.setFitToWidth(true);
@@ -172,7 +185,6 @@ public class EvaluationView {
                 + "Make sure you have both manual reviews AND LLM results for the same findings.\n"
                 + "Complete manual review first, then run LLM triage.");
             metricsArea.getChildren().clear();
-            matrixArea.getChildren().clear();
             scannerArea.getChildren().clear();
             return;
         }
@@ -182,8 +194,10 @@ public class EvaluationView {
             + "  ·  " + report.getTotalCompared() + " finding pairs compared");
 
         renderMetrics(report);
-        renderMatrix(report.getConfusionMatrix());
         renderScannerBreakdown();
+        renderVersionComparison();
+        renderVersionBreakdown();
+        renderTotalEvaluation();
     }
 
     // ── Metrics cards ──────────────────────────────────────────────────────
@@ -295,7 +309,14 @@ public class EvaluationView {
         Label sub = new Label("Rows = manual verdict  ·  Columns = LLM verdict");
         sub.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
 
-        // Build the matrix grid
+        VBox matrixCard = new VBox(8);
+        matrixCard.getChildren().add(buildMatrixGrid(matrix));
+        matrixCard.setMaxWidth(600);
+
+        matrixArea.getChildren().addAll(heading, sub, matrixCard);
+    }
+
+    private GridPane buildMatrixGrid(ConfusionMatrix matrix) {
         GridPane grid = new GridPane();
         grid.setHgap(3); grid.setVgap(3);
         grid.setStyle("-fx-background-color: white; -fx-background-radius: 10; "
@@ -305,38 +326,28 @@ public class EvaluationView {
         String[] labels = {"TP", "FP", "REVIEW"};
         String[] colors = {GREEN, RED, AMBER};
 
-        // Column headers
-        grid.add(headerCell(""),              0, 0);
-        grid.add(headerCell("LLM: TP"),       1, 0);
-        grid.add(headerCell("LLM: FP"),       2, 0);
-        grid.add(headerCell("LLM: REVIEW"),   3, 0);
-        grid.add(headerCell("Row Total"),      4, 0);
+        grid.add(headerCell(""),            0, 0);
+        grid.add(headerCell("LLM: TP"),     1, 0);
+        grid.add(headerCell("LLM: FP"),     2, 0);
+        grid.add(headerCell("LLM: REVIEW"), 3, 0);
+        grid.add(headerCell("Row Total"),   4, 0);
 
-        // Rows
         Verdict[] verdicts = {Verdict.TP, Verdict.FP, Verdict.REVIEW};
         for (int i = 0; i < verdicts.length; i++) {
             grid.add(headerCell("Manual: " + labels[i]), 0, i + 1);
             for (int j = 0; j < verdicts.length; j++) {
-                int val   = matrix.get(verdicts[i], verdicts[j]);
-                boolean diag = (i == j);
-                grid.add(matrixCell(val, diag, colors[i]), j + 1, i + 1);
+                grid.add(matrixCell(matrix.get(verdicts[i], verdicts[j]), i == j, colors[i]), j + 1, i + 1);
             }
-            // Row total (how many findings the manual reviewer assigned this verdict)
             grid.add(totalCell(matrix.totalManual(verdicts[i])), 4, i + 1);
         }
 
-        // Column totals row (how many times the LLM predicted each verdict)
         grid.add(headerCell("Col Total"),                    0, 4);
         grid.add(totalCell(matrix.totalLlm(Verdict.TP)),     1, 4);
         grid.add(totalCell(matrix.totalLlm(Verdict.FP)),     2, 4);
         grid.add(totalCell(matrix.totalLlm(Verdict.REVIEW)), 3, 4);
         grid.add(totalCell(matrix.total()),                  4, 4);
 
-        VBox matrixCard = new VBox(8);
-        matrixCard.getChildren().addAll(grid);
-        matrixCard.setMaxWidth(600);
-
-        matrixArea.getChildren().addAll(heading, sub, matrixCard);
+        return grid;
     }
 
     private Label headerCell(String text) {
@@ -371,6 +382,345 @@ public class EvaluationView {
         l.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; "
             + "-fx-text-fill: " + TEXT + "; -fx-padding: 6 10;");
         return l;
+    }
+
+    // ── Prompt version comparison ──────────────────────────────────────────
+
+    private record VersionMetrics(int tpTp, int tpTotal, int fpFp, int fpTotal, int predTp, int total) {
+        double tpRecall()    { return tpTotal > 0 ? (double) tpTp / tpTotal : 0; }
+        double fpAgreement() { return fpTotal > 0 ? (double) fpFp / fpTotal : 0; }
+        double tpPrecision() { return predTp  > 0 ? (double) tpTp / predTp  : 0; }
+    }
+
+    private VersionMetrics computeVersionMetrics(List<LlmResult> results,
+                                                  java.util.Map<Long, ManualReview> reviewMap) {
+        // Deduplicate: if multiple results per finding, keep latest (highest id)
+        java.util.Map<Long, LlmResult> deduped = new java.util.LinkedHashMap<>();
+        for (LlmResult lr : results) deduped.merge(lr.getFindingId(), lr,
+            (a, b) -> a.getId() > b.getId() ? a : b);
+
+        int tpTp = 0, tpTotal = 0, fpFp = 0, fpTotal = 0, predTp = 0;
+        for (LlmResult lr : deduped.values()) {
+            ManualReview mr = reviewMap.get(lr.getFindingId());
+            if (mr == null) continue;
+            Verdict human = mr.getVerdict();
+            Verdict llm   = lr.getLlmVerdict();
+            if (human == Verdict.TP) { tpTotal++; if (llm == Verdict.TP) tpTp++; }
+            if (human == Verdict.FP) { fpTotal++; if (llm == Verdict.FP) fpFp++; }
+            if (llm == Verdict.TP) predTp++;
+        }
+        return new VersionMetrics(tpTp, tpTotal, fpFp, fpTotal, predTp, deduped.size());
+    }
+
+    private ConfusionMatrix computeVersionMatrix(List<LlmResult> results,
+                                                  java.util.Map<Long, ManualReview> reviewMap) {
+        java.util.Map<Long, LlmResult> deduped = new java.util.LinkedHashMap<>();
+        for (LlmResult lr : results) deduped.merge(lr.getFindingId(), lr,
+            (a, b) -> a.getId() > b.getId() ? a : b);
+
+        ConfusionMatrix matrix = new ConfusionMatrix();
+        for (LlmResult lr : deduped.values()) {
+            ManualReview mr = reviewMap.get(lr.getFindingId());
+            if (mr == null) continue;
+            matrix.increment(mr.getVerdict(), lr.getLlmVerdict());
+        }
+        return matrix;
+    }
+
+    private void renderVersionComparison() {
+        compareArea.getChildren().clear();
+
+        // Discover all versions that actually have results
+        List<String> allVersions = ctx.llmRepo().findAll().stream()
+            .map(LlmResult::getPromptVersion)
+            .filter(v -> v != null && !v.isBlank())
+            .distinct().sorted()
+            .collect(java.util.stream.Collectors.toList());
+
+        if (allVersions.size() < 2) return;
+
+        java.util.Map<Long, ManualReview> reviewMap = ctx.reviewRepo().findAll().stream()
+            .collect(java.util.stream.Collectors.toMap(
+                ManualReview::getFindingId, r -> r, (a, b) -> b));
+
+        Label heading = new Label("Prompt Version Comparison");
+        heading.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
+
+        VBox tableContainer = new VBox(8);
+
+        if (allVersions.size() == 2) {
+            String baseVer = allVersions.get(0);
+            String vsVer   = allVersions.get(1);
+            String baseName = ctx.promptTemplateRepo().findByVersion(baseVer)
+                .map(t -> baseVer + ": " + t.getName()).orElse(baseVer);
+            String vsName = ctx.promptTemplateRepo().findByVersion(vsVer)
+                .map(t -> vsVer + ": " + t.getName()).orElse(vsVer);
+            Label sub = new Label(baseName + "  ·  " + vsName);
+            sub.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
+            sub.setWrapText(true);
+            buildComparisonTable(tableContainer, baseVer, vsVer, reviewMap);
+            compareArea.getChildren().addAll(heading, sub, tableContainer);
+        } else {
+            // Multi-version: show pickers
+            Label baseLabel = new Label("Base:");
+            baseLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
+            Label vsLabel = new Label("Compare to:");
+            vsLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
+
+            ComboBox<String> baseBox = new ComboBox<>(
+                javafx.collections.FXCollections.observableArrayList(allVersions));
+            baseBox.setValue(allVersions.get(0));
+            baseBox.setStyle("-fx-font-size: 12px;");
+
+            ComboBox<String> vsBox = new ComboBox<>(
+                javafx.collections.FXCollections.observableArrayList(allVersions));
+            vsBox.setValue(allVersions.get(allVersions.size() - 1));
+            vsBox.setStyle("-fx-font-size: 12px;");
+
+            HBox pickerRow = new HBox(10, baseLabel, baseBox, vsLabel, vsBox);
+            pickerRow.setAlignment(Pos.CENTER_LEFT);
+            pickerRow.setPadding(new Insets(0, 0, 4, 0));
+
+            Runnable rebuild = () -> {
+                String base = baseBox.getValue();
+                String vs   = vsBox.getValue();
+                if (base == null || vs == null || base.equals(vs)) {
+                    tableContainer.getChildren().clear();
+                    Label err = new Label("Select two different versions to compare.");
+                    err.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+                    tableContainer.getChildren().add(err);
+                    return;
+                }
+                tableContainer.getChildren().clear();
+                buildComparisonTable(tableContainer, base, vs, reviewMap);
+            };
+
+            baseBox.setOnAction(e -> rebuild.run());
+            vsBox.setOnAction(e -> rebuild.run());
+            rebuild.run();
+
+            compareArea.getChildren().addAll(heading, pickerRow, tableContainer);
+        }
+    }
+
+    private void buildComparisonTable(VBox container, String baseVer, String vsVer,
+            java.util.Map<Long, ManualReview> reviewMap) {
+
+        List<LlmResult> baseResults = ctx.llmRepo().findAllByPromptVersion(baseVer);
+        List<LlmResult> vsResults   = ctx.llmRepo().findAllByPromptVersion(vsVer);
+
+        if (baseResults.isEmpty() || vsResults.isEmpty()) {
+            Label msg = new Label("No results for one of the selected versions.");
+            msg.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+            container.getChildren().add(msg);
+            return;
+        }
+
+        // Intersect finding IDs for a fair comparison
+        java.util.Set<Long> sharedIds = vsResults.stream()
+            .map(LlmResult::getFindingId).collect(java.util.stream.Collectors.toSet());
+        List<LlmResult> baseFiltered = baseResults.stream()
+            .filter(r -> sharedIds.contains(r.getFindingId())).toList();
+
+        VersionMetrics mBase = computeVersionMetrics(baseFiltered, reviewMap);
+        VersionMetrics mVs   = computeVersionMetrics(vsResults,    reviewMap);
+
+        String baseName = ctx.promptTemplateRepo().findByVersion(baseVer)
+            .map(t -> baseVer + ": " + t.getName()).orElse(baseVer);
+        String vsName = ctx.promptTemplateRepo().findByVersion(vsVer)
+            .map(t -> vsVer + ": " + t.getName()).orElse(vsVer);
+        Label sub = new Label(baseName + "  ·  " + vsName);
+        sub.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
+        sub.setWrapText(true);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(2); grid.setVgap(2);
+        grid.setStyle("-fx-background-color: white; -fx-background-radius: 10; "
+            + "-fx-padding: 20; "
+            + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 8, 0, 0, 2);");
+
+        grid.add(compHeader("Metric"),                                     0, 0);
+        grid.add(compHeader(baseVer),                                      1, 0);
+        grid.add(compHeader(vsVer),                                        2, 0);
+        grid.add(compHeader("Δ (" + vsVer + " − " + baseVer + ")"),       3, 0);
+
+        record Row(String label, double base, double vs, boolean higherIsBetter) {}
+        List<Row> rows = List.of(
+            new Row("TP Recall",    mBase.tpRecall(),    mVs.tpRecall(),    true),
+            new Row("FP Agreement", mBase.fpAgreement(), mVs.fpAgreement(), true),
+            new Row("TP Precision", mBase.tpPrecision(), mVs.tpPrecision(), true)
+        );
+
+        for (int i = 0; i < rows.size(); i++) {
+            Row r = rows.get(i);
+            double delta = r.vs() - r.base();
+            String sign  = delta >= 0 ? "+" : "";
+            String deltaColor = (delta >= 0) == r.higherIsBetter() ? GREEN : RED;
+
+            grid.add(compLabel(r.label()),                         0, i + 1);
+            grid.add(compValue(pct(r.base()), BLUE),               1, i + 1);
+            grid.add(compValue(pct(r.vs()),  "#7C3AED"),           2, i + 1);
+            grid.add(compValue(sign + pct(delta), deltaColor),     3, i + 1);
+        }
+
+        grid.add(compLabel("Findings Processed"),                  0, rows.size() + 1);
+        grid.add(compValue(String.valueOf(mBase.total()), BLUE),   1, rows.size() + 1);
+        grid.add(compValue(String.valueOf(mVs.total()),  "#7C3AED"), 2, rows.size() + 1);
+        grid.add(compLabel("—"),                                   3, rows.size() + 1);
+
+        VBox card = new VBox(8);
+        card.getChildren().add(grid);
+        card.setMaxWidth(700);
+
+        container.getChildren().addAll(sub, card);
+    }
+
+    private Label compHeader(String text) {
+        Label l = new Label(text);
+        l.setPrefWidth(150); l.setPrefHeight(32);
+        l.setAlignment(Pos.CENTER);
+        l.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; "
+            + "-fx-text-fill: " + MUTED + "; -fx-padding: 4 10; "
+            + "-fx-background-color: #F9FAFB; -fx-background-radius: 4;");
+        return l;
+    }
+
+    private Label compLabel(String text) {
+        Label l = new Label(text);
+        l.setPrefWidth(150); l.setPrefHeight(40);
+        l.setAlignment(Pos.CENTER_LEFT);
+        l.setStyle("-fx-font-size: 12px; -fx-text-fill: " + TEXT + "; -fx-padding: 4 10;");
+        return l;
+    }
+
+    private Label compValue(String text, String color) {
+        Label l = new Label(text);
+        l.setPrefWidth(150); l.setPrefHeight(40);
+        l.setAlignment(Pos.CENTER);
+        l.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; "
+            + "-fx-font-family: 'Courier New'; "
+            + "-fx-text-fill: " + color + "; -fx-padding: 4 10;");
+        return l;
+    }
+
+    // ── Version-based evaluation ───────────────────────────────────────────
+
+    private void renderVersionBreakdown() {
+        versionArea.getChildren().clear();
+
+        List<LlmResult> allLlm = ctx.llmRepo().findAll();
+        if (allLlm.isEmpty()) return;
+
+        java.util.Map<Long, ManualReview> reviewMap = ctx.reviewRepo().findAll().stream()
+            .collect(java.util.stream.Collectors.toMap(
+                ManualReview::getFindingId, r -> r, (a, b) -> b));
+
+        // Group by prompt version (preserving insertion order)
+        java.util.Map<String, List<LlmResult>> byVersion = new java.util.LinkedHashMap<>();
+        for (LlmResult lr : allLlm) {
+            String v = lr.getPromptVersion() != null ? lr.getPromptVersion() : "unknown";
+            byVersion.computeIfAbsent(v, k -> new java.util.ArrayList<>()).add(lr);
+        }
+
+        Label heading = new Label("Version-Based Evaluation");
+        heading.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
+        Label sub = new Label(
+            "Per-prompt-version metrics across all findings triaged by each version");
+        sub.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
+        sub.setWrapText(true);
+
+        versionArea.getChildren().addAll(heading, sub);
+
+        for (java.util.Map.Entry<String, List<LlmResult>> entry : byVersion.entrySet()) {
+            String version = entry.getKey();
+            VersionMetrics m = computeVersionMetrics(entry.getValue(), reviewMap);
+            ConfusionMatrix cm = computeVersionMatrix(entry.getValue(), reviewMap);
+
+            VBox versionBlock = new VBox(12);
+
+            Label versionLbl = new Label(version + "  (" + m.total() + " findings triaged)");
+            versionLbl.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: " + BLUE + ";");
+
+            HBox cards = new HBox(16);
+            cards.getChildren().addAll(
+                metricCard("TP Recall",
+                    pct(m.tpRecall()),
+                    GREEN,
+                    m.tpTp() + " / " + m.tpTotal() + " real vulnerabilities caught",
+                    m.tpRecall() >= 0.7),
+                metricCard("FP Agreement",
+                    pct(m.fpAgreement()),
+                    AMBER,
+                    m.fpFp() + " / " + m.fpTotal() + " false positives agreed",
+                    m.fpAgreement() >= 0.5),
+                metricCard("TP Precision",
+                    pct(m.tpPrecision()),
+                    AMBER,
+                    m.tpTp() + " / " + m.predTp() + " TP predictions correct",
+                    m.tpPrecision() >= 0.2)
+            );
+            cards.getChildren().forEach(n -> HBox.setHgrow(n, Priority.ALWAYS));
+
+            Label matrixSub = new Label("Confusion matrix  ·  Rows = manual verdict  ·  Columns = LLM verdict");
+            matrixSub.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
+
+            VBox matrixCard = new VBox(4);
+            matrixCard.getChildren().addAll(matrixSub, buildMatrixGrid(cm));
+            matrixCard.setMaxWidth(600);
+
+            versionBlock.getChildren().addAll(versionLbl, cards, matrixCard);
+            versionArea.getChildren().add(versionBlock);
+        }
+    }
+
+    // ── Total evaluation ───────────────────────────────────────────────────
+
+    private void renderTotalEvaluation() {
+        totalArea.getChildren().clear();
+
+        List<LlmResult> allLlm = ctx.llmRepo().findAll();
+        if (allLlm.isEmpty()) return;
+
+        java.util.Map<Long, ManualReview> reviewMap = ctx.reviewRepo().findAll().stream()
+            .collect(java.util.stream.Collectors.toMap(
+                ManualReview::getFindingId, r -> r, (a, b) -> b));
+
+        VersionMetrics m = computeVersionMetrics(allLlm, reviewMap);
+
+        Label heading = new Label("Total Evaluation");
+        heading.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
+        Label sub = new Label(
+            "Aggregate metrics across all LLM results in the database — all versions combined, "
+            + "latest result per finding");
+        sub.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
+        sub.setWrapText(true);
+
+        HBox cards = new HBox(16);
+        cards.getChildren().addAll(
+            metricCard("TP Recall",
+                pct(m.tpRecall()),
+                GREEN,
+                m.tpTp() + " / " + m.tpTotal() + " real vulnerabilities caught",
+                m.tpRecall() >= 0.7),
+            metricCard("FP Agreement",
+                pct(m.fpAgreement()),
+                AMBER,
+                m.fpFp() + " / " + m.fpTotal() + " false positives agreed",
+                m.fpAgreement() >= 0.5),
+            metricCard("TP Precision",
+                pct(m.tpPrecision()),
+                AMBER,
+                m.tpTp() + " / " + m.predTp() + " TP predictions correct",
+                m.tpPrecision() >= 0.2),
+            metricCard("Findings Triaged",
+                String.valueOf(m.total()),
+                BLUE,
+                "Unique findings with both LLM result and manual review",
+                true)
+        );
+        cards.getChildren().forEach(n -> HBox.setHgrow(n, Priority.ALWAYS));
+
+        totalArea.getChildren().addAll(heading, sub, cards);
     }
 
     // ── Scanner breakdown ──────────────────────────────────────────────────
@@ -437,9 +787,9 @@ public class EvaluationView {
         long manualRev = reviews.stream().filter(r -> r.getVerdict() == Verdict.REVIEW).count();
         long reviewed  = reviews.size();
 
-        // LLM results via findByFindingId (same as MetricsCalculator approach)
+        // LLM results scoped to the selected run
         java.util.Map<Long, LlmResult> llmByFinding = reviews.stream()
-            .map(mr -> ctx.llmRepo().findByFindingId(mr.getFindingId()))
+            .map(mr -> ctx.llmRepo().findByFindingIdAndRunId(mr.getFindingId(), currentRunId))
             .filter(Optional::isPresent)
             .map(Optional::get)
             .collect(java.util.stream.Collectors.toMap(LlmResult::getFindingId, l -> l,
@@ -462,13 +812,33 @@ public class EvaluationView {
         String agreementPct = reviewed > 0
             ? String.format("%.1f%%", (double) agreed / reviewed * 100) : "—";
 
+        // Per-version LLM triaged counts (across all runs, scanner-filtered, deduplicated per finding)
+        List<LlmResult> allLlmAll = ctx.llmRepo().findAll();
+        java.util.Map<String, java.util.Set<Long>> versionFindingIds = new java.util.LinkedHashMap<>();
+        for (LlmResult lr : allLlmAll) {
+            Finding f = findingById.get(lr.getFindingId());
+            if (!"All Scanners".equals(selectedScanner)
+                    && (f == null || !f.getSource().name().equalsIgnoreCase(selectedScanner))) continue;
+            String v = lr.getPromptVersion() != null ? lr.getPromptVersion() : "unknown";
+            versionFindingIds.computeIfAbsent(v, k -> new java.util.HashSet<>()).add(lr.getFindingId());
+        }
+
         // Summary stat cards
         HBox summaryCards = new HBox(16);
         summaryCards.getChildren().addAll(
-            breakdownCard("Total Findings",  String.valueOf(totalFindings), BLUE,   "From this scanner in database"),
-            breakdownCard("Manually Reviewed", String.valueOf(reviewed),   GREEN,  "Findings with TP/FP/REVIEW verdict"),
-            breakdownCard("LLM Triaged",     String.valueOf(llmForScanner.size()), AMBER, "Findings processed by LLM triage"),
-            breakdownCard("LLM Agreement",   agreementPct,                 reviewed > 0 ? "#7C3AED" : MUTED, "LLM matched manual verdict")
+            breakdownCard("Total Findings",    String.valueOf(totalFindings), BLUE,  "From this scanner in database"),
+            breakdownCard("Manually Reviewed", String.valueOf(reviewed),      GREEN, "Findings with TP/FP/REVIEW verdict")
+        );
+        for (java.util.Map.Entry<String, java.util.Set<Long>> vEntry : versionFindingIds.entrySet()) {
+            summaryCards.getChildren().add(
+                breakdownCard("LLM Triaged (" + vEntry.getKey() + ")",
+                    String.valueOf(vEntry.getValue().size()),
+                    AMBER,
+                    "Findings processed by " + vEntry.getKey())
+            );
+        }
+        summaryCards.getChildren().add(
+            breakdownCard("LLM Agreement", agreementPct, reviewed > 0 ? "#7C3AED" : MUTED, "LLM matched manual verdict")
         );
         summaryCards.getChildren().forEach(n -> HBox.setHgrow(n, Priority.ALWAYS));
 
@@ -647,6 +1017,7 @@ public class EvaluationView {
         try {
             new HtmlReportExporter().export(
                 selected.run.getName(), report, allFindings, reviewMap, llmMap,
+                ctx.llmRepo().findAll(),
                 file.getAbsolutePath());
             statusLabel.setText("Report saved to: " + file.getAbsolutePath());
         } catch (Exception e) {
@@ -678,7 +1049,6 @@ public class EvaluationView {
             if (response.getButtonData() == ButtonBar.ButtonData.OK_DONE) {
                 ctx.evalRepo().deleteById(selected.run.getId());
                 metricsArea.getChildren().clear();
-                matrixArea.getChildren().clear();
                 loadRuns();
                 statusLabel.setText("Deleted \"" + selected.run.getName() + "\".");
             }

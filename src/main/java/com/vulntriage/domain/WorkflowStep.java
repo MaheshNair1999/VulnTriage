@@ -22,6 +22,7 @@ public class WorkflowStep {
     /** All supported step types. */
     public enum StepType {
         SCAN,    // invoke a scanner (Semgrep or Trivy)
+        SELECT,  // load existing DB findings matching filter criteria (no scan needed)
         FILTER,  // apply a boolean filter expression
         SAMPLE,  // draw a stratified sample
         TRIAGE,  // run LLM triage

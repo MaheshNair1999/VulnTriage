@@ -1,6 +1,7 @@
 package com.vulntriage.ui.workflow;
 
 import com.vulntriage.app.AppContext;
+import com.vulntriage.domain.PromptTemplate;
 import com.vulntriage.domain.WorkflowDefinition;
 import com.vulntriage.domain.WorkflowStep;
 import com.vulntriage.domain.WorkflowStep.StepType;
@@ -165,8 +166,9 @@ public class WorkflowView {
 
         List<StepDef> defs = List.of(
             new StepDef(StepType.SCAN,   "⊕ Scan",   "#1D4ED8"),
+            new StepDef(StepType.SELECT, "⊚ Select", "#0891B2"),
             new StepDef(StepType.FILTER, "⊘ Filter", "#7C3AED"),
-            new StepDef(StepType.SAMPLE, "⊙ Sample", "#0891B2"),
+            new StepDef(StepType.SAMPLE, "⊙ Sample", "#64748B"),
             new StepDef(StepType.TRIAGE, "◉ Triage", "#D97706"),
             new StepDef(StepType.SCORE,  "★ Score",  "#059669"),
             new StepDef(StepType.REPORT, "≡ Report", "#DC2626")
@@ -425,9 +427,19 @@ public class WorkflowView {
         switch (type) {
             case SCAN   -> { row.params.put("scanner", "semgrep");
                              row.params.put("ruleset", "p/security-audit"); }
+            case SELECT -> {
+                row.params.put("scanner",      "all");
+                row.params.put("repository",   "all");
+                row.params.put("rule_pattern", "");
+                row.params.put("severity",     "all");
+            }
             case FILTER -> row.params.put("condition", "severity >= WARNING");
             case SAMPLE -> row.params.put("size", "1000");
-            case TRIAGE -> row.params.put("model", ctx.getOllamaModel());
+            case TRIAGE -> {
+                row.params.put("prompt_version", "v1.0");
+                row.params.put("model",          ctx.getOllamaModel());
+                row.params.put("run_name",       "Workflow Run");
+            }
             case REPORT -> row.params.put("formats", "json,csv");
             default     -> {}
         }
@@ -435,6 +447,176 @@ public class WorkflowView {
     }
 
     private void configureStep(StepRow row, int index) {
+        if (row.type == StepType.TRIAGE) {
+            configureTriageStep(row, index);
+        } else if (row.type == StepType.SELECT) {
+            configureSelectStep(row, index);
+        } else {
+            configureGenericStep(row, index);
+        }
+    }
+
+    /** Dedicated config dialog for TRIAGE steps — shows a prompt ComboBox. */
+    private void configureTriageStep(StepRow row, int index) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Configure Triage Step");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        dialog.getDialogPane().setPrefWidth(440);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(12); grid.setVgap(12);
+        grid.setPadding(new Insets(20));
+        grid.getColumnConstraints().addAll(
+            columnPct(35), columnPct(65));
+
+        int r = 0;
+
+        // Prompt selector
+        grid.add(boldLabel("Prompt Template"), 0, r);
+        ComboBox<PromptTemplate> promptBox = new ComboBox<>();
+        promptBox.setMaxWidth(Double.MAX_VALUE);
+        java.util.List<PromptTemplate> templates = ctx.promptTemplateRepo().findAll();
+        promptBox.getItems().setAll(templates);
+        promptBox.setCellFactory(lv -> new ListCell<>() {
+            @Override protected void updateItem(PromptTemplate t, boolean empty) {
+                super.updateItem(t, empty);
+                setText(empty || t == null ? null : t.getName() + "  (" + t.getVersion() + ")");
+            }
+        });
+        promptBox.setButtonCell(new ListCell<>() {
+            @Override protected void updateItem(PromptTemplate t, boolean empty) {
+                super.updateItem(t, empty);
+                setText(empty || t == null ? "Select…" : t.getName() + "  (" + t.getVersion() + ")");
+            }
+        });
+        String currentVer = row.params.getOrDefault("prompt_version", "v1.0");
+        templates.stream().filter(t -> currentVer.equals(t.getVersion()))
+            .findFirst().ifPresent(t -> promptBox.getSelectionModel().select(t));
+        if (promptBox.getSelectionModel().isEmpty() && !templates.isEmpty())
+            promptBox.getSelectionModel().selectFirst();
+        grid.add(promptBox, 1, r++);
+
+        // Run name
+        grid.add(boldLabel("Run Name"), 0, r);
+        TextField runNameField = new TextField(row.params.getOrDefault("run_name", "Workflow Run"));
+        styleField(runNameField);
+        grid.add(runNameField, 1, r++);
+
+        // Model
+        grid.add(boldLabel("Model"), 0, r);
+        TextField modelField = new TextField(row.params.getOrDefault("model", ctx.getOllamaModel()));
+        styleField(modelField);
+        grid.add(modelField, 1, r++);
+
+        // URL (optional override)
+        grid.add(boldLabel("Ollama URL (optional)"), 0, r);
+        TextField urlField = new TextField(row.params.getOrDefault("url", ""));
+        urlField.setPromptText("Leave blank to use Settings URL");
+        styleField(urlField);
+        grid.add(urlField, 1, r++);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(btn -> {
+            if (btn == ButtonType.OK) {
+                row.params.clear();
+                PromptTemplate sel = promptBox.getSelectionModel().getSelectedItem();
+                row.params.put("prompt_version", sel != null ? sel.getVersion() : "v1.0");
+                String rn = runNameField.getText().trim();
+                if (!rn.isBlank()) row.params.put("run_name", rn);
+                String m = modelField.getText().trim();
+                if (!m.isBlank()) row.params.put("model", m);
+                String u = urlField.getText().trim().replaceAll("/+$", "");
+                if (!u.isBlank()) row.params.put("url", u);
+                stepRows.set(index, row);
+            }
+            return null;
+        });
+        dialog.showAndWait();
+    }
+
+    /** Dedicated config dialog for SELECT steps — structured filter criteria. */
+    private void configureSelectStep(StepRow row, int index) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Configure Select Step");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        dialog.getDialogPane().setPrefWidth(460);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(12); grid.setVgap(12);
+        grid.setPadding(new Insets(20));
+        grid.getColumnConstraints().addAll(columnPct(38), columnPct(62));
+
+        int r = 0;
+
+        // Scanner
+        grid.add(boldLabel("Scanner"), 0, r);
+        ComboBox<String> scannerBox = new ComboBox<>(
+            javafx.collections.FXCollections.observableArrayList(
+                "all", "SEMGREP", "TRIVY", "GITLEAKS", "CODEQL", "SONARQUBE"));
+        scannerBox.setValue(row.params.getOrDefault("scanner", "all"));
+        scannerBox.setMaxWidth(Double.MAX_VALUE);
+        grid.add(scannerBox, 1, r++);
+
+        // Repository
+        grid.add(boldLabel("Repository"), 0, r);
+        java.util.List<String> repoNames = new java.util.ArrayList<>();
+        repoNames.add("all");
+        ctx.repositoryRepo().findAll().stream()
+            .map(rep -> rep.getName() != null ? rep.getName() : "")
+            .filter(n -> !n.isBlank())
+            .forEach(repoNames::add);
+        ComboBox<String> repoBox = new ComboBox<>(
+            javafx.collections.FXCollections.observableArrayList(repoNames));
+        String currentRepo = row.params.getOrDefault("repository", "all");
+        repoBox.setValue(repoNames.contains(currentRepo) ? currentRepo : "all");
+        repoBox.setMaxWidth(Double.MAX_VALUE);
+        grid.add(repoBox, 1, r++);
+
+        // Rule pattern
+        grid.add(boldLabel("Rule contains"), 0, r);
+        TextField ruleField = new TextField(row.params.getOrDefault("rule_pattern", ""));
+        ruleField.setPromptText("e.g. xss, sql, template (empty = all)");
+        styleField(ruleField);
+        grid.add(ruleField, 1, r++);
+
+        // Severity
+        grid.add(boldLabel("Severity"), 0, r);
+        ComboBox<String> sevBox = new ComboBox<>(
+            javafx.collections.FXCollections.observableArrayList(
+                "all", "ERROR", "WARNING", "INFO", "ERROR,WARNING"));
+        sevBox.setValue(row.params.getOrDefault("severity", "all"));
+        sevBox.setEditable(true);
+        sevBox.setMaxWidth(Double.MAX_VALUE);
+        grid.add(sevBox, 1, r++);
+
+        // Info note
+        Label note = new Label(
+            "SELECT loads existing findings from the database matching these criteria "
+            + "and passes them directly to TRIAGE — no scan needed.");
+        note.setStyle("-fx-font-size: 10px; -fx-text-fill: #6B7280; -fx-font-style: italic;");
+        note.setWrapText(true);
+        GridPane.setColumnSpan(note, 2);
+        grid.add(note, 0, r);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(btn -> {
+            if (btn == ButtonType.OK) {
+                row.params.clear();
+                row.params.put("scanner",      scannerBox.getValue() != null ? scannerBox.getValue() : "all");
+                row.params.put("repository",   repoBox.getValue()    != null ? repoBox.getValue()    : "all");
+                row.params.put("rule_pattern", ruleField.getText().trim());
+                row.params.put("severity",     sevBox.getValue()     != null ? sevBox.getValue()     : "all");
+                stepRows.set(index, row);
+            }
+            return null;
+        });
+        dialog.showAndWait();
+    }
+
+    /** Generic key-value config dialog for all non-TRIAGE steps. */
+    private void configureGenericStep(StepRow row, int index) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Configure " + row.type.name() + " Step");
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
@@ -443,7 +625,6 @@ public class WorkflowView {
         grid.setHgap(12); grid.setVgap(10);
         grid.setPadding(new Insets(16));
 
-        // Show one field per param, plus add new
         List<TextField> keyFields = new ArrayList<>();
         List<TextField> valFields = new ArrayList<>();
 
@@ -460,7 +641,6 @@ public class WorkflowView {
             grid.add(v, 1, rowNum++);
         }
 
-        // Empty row for new param
         TextField newKey = new TextField(); newKey.setPromptText("key");
         TextField newVal = new TextField(); newVal.setPromptText("value");
         styleField(newKey); styleField(newVal);
@@ -480,7 +660,6 @@ public class WorkflowView {
                 if (!newKey.getText().isBlank()) {
                     row.params.put(newKey.getText().trim(), newVal.getText().trim());
                 }
-                // Trigger refresh by replacing the item
                 stepRows.set(index, row);
             }
             return null;
@@ -691,8 +870,18 @@ public class WorkflowView {
 
         if (result.get() == saveAndLeave) {
             saveWorkflow();
+            hasUnsavedChanges = false;
+        } else {
+            // Discard: revert the form so it's clean if the user comes back
+            WorkflowDefinition loaded = savedList.getSelectionModel().getSelectedItem();
+            if (loaded != null) {
+                loadSelected();  // restores saved state and resets hasUnsavedChanges
+            } else {
+                stepRows.clear();
+                nameField.setText("My Security Workflow");
+                hasUnsavedChanges = false;
+            }
         }
-        hasUnsavedChanges = false;
         return true;
     }
 
@@ -737,6 +926,13 @@ public class WorkflowView {
         Label l = new Label(text);
         l.setStyle("-fx-font-weight: bold; -fx-text-fill: #374151; -fx-font-size: 11px;");
         return l;
+    }
+
+    private javafx.scene.layout.ColumnConstraints columnPct(double pct) {
+        javafx.scene.layout.ColumnConstraints cc = new javafx.scene.layout.ColumnConstraints();
+        cc.setPercentWidth(pct);
+        cc.setHgrow(javafx.scene.layout.Priority.ALWAYS);
+        return cc;
     }
 
     private Button primaryBtn(String text) {

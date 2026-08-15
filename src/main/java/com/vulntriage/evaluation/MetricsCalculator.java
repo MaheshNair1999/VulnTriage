@@ -49,15 +49,20 @@ public class MetricsCalculator {
                                     EvaluationRepository evalRepo,
                                     java.util.Set<Long> validFindingIds) {
 
-        // Compute from manually-reviewed findings that also have any LLM result.
-        // Filtered to validFindingIds when provided to skip orphaned rows.
+        // Scope LLM results to this specific run (deduplicate by finding, keep latest).
+        Map<Long, LlmResult> llmByFinding = new java.util.LinkedHashMap<>();
+        for (LlmResult lr : llmRepo.findByEvaluationRunId(evaluationRunId)) {
+            llmByFinding.merge(lr.getFindingId(), lr,
+                (a, b) -> a.getId() > b.getId() ? a : b);
+        }
+
+        // Manual reviews filtered to valid findings that also appear in this run.
         List<ManualReview> reviews = reviewRepo.findAll().stream()
             .filter(r -> validFindingIds == null || validFindingIds.contains(r.getFindingId()))
+            .filter(r -> llmByFinding.containsKey(r.getFindingId()))
             .collect(Collectors.toList());
         List<LlmResult> llmResults = reviews.stream()
-            .map(r -> llmRepo.findByFindingId(r.getFindingId()))
-            .filter(Optional::isPresent)
-            .map(Optional::get)
+            .map(r -> llmByFinding.get(r.getFindingId()))
             .collect(Collectors.toList());
 
         // Index manual reviews by finding ID for O(1) lookup

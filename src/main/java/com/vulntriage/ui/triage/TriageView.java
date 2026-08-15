@@ -1,18 +1,11 @@
 package com.vulntriage.ui.triage;
 
 import com.vulntriage.app.AppContext;
-import com.vulntriage.domain.EvaluationRun;
-import com.vulntriage.domain.Finding;
 import com.vulntriage.domain.LlmResult;
-import com.vulntriage.triage.api.TriageResult;
-import com.vulntriage.triage.api.TriageStrategy;
-import com.vulntriage.triage.ollama.OllamaTriageStrategy;
-import com.vulntriage.triage.ollama.PromptBuilder;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
-import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -30,11 +23,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * LLM Triage screen.
- *
- * Runs the configured LLM over all findings and saves results to the DB.
- * Supports stop, crash-resume (skips already-triaged findings), and
- * row deletion via the Delete key.
+ * Triage Results screen — read-only view of all LLM triage results in the DB.
+ * Supports version/repo filtering, double-click detail view, and row deletion.
  */
 public class TriageView {
 
@@ -52,20 +42,10 @@ public class TriageView {
 
     private final AppContext ctx = AppContext.getInstance();
 
-    private Label        statusLabel;
-    private ProgressBar  progressBar;
-    private Label        progressLabel;
-    private Button       runBtn;
-    private Button       stopBtn;
-    private TextField    runNameField;
-    private TextField    ollamaUrlField;
-    private TextField    ollamaModelField;
-    private Label        connectionStatus;
-    private Task<Void>   currentTask;   // kept so stopBtn can cancel it
-
     private final ObservableList<ResultRow> resultRows    = FXCollections.observableArrayList();
     private final FilteredList<ResultRow>   filteredRows  = new FilteredList<>(resultRows, r -> true);
     private ComboBox<String>                repoFilter;
+    private ComboBox<String>                versionFilter;
 
     public Node build() {
         VBox root = new VBox(0);
@@ -74,6 +54,13 @@ public class TriageView {
 
         // Load whatever is already in the DB
         loadExistingResults();
+
+        // Refresh when any triage (including targeted) finishes
+        ctx.triageRunningProperty().addListener((obs, wasRunning, isRunning) -> {
+            if (!isRunning && wasRunning) {
+                Platform.runLater(this::loadExistingResults);
+            }
+        });
 
         // Refresh when a workflow finishes
         ctx.workflowRunningProperty().addListener((obs, wasRunning, isRunning) -> {
@@ -95,9 +82,9 @@ public class TriageView {
             + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 1 0;");
 
         VBox titleBlock = new VBox(2);
-        Label title = new Label("LLM Triage");
+        Label title = new Label("Triage Results");
         title.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
-        Label sub = new Label("Run AI-assisted triage on findings using Ollama.");
+        Label sub = new Label("All LLM triage results across all runs and prompt versions.");
         sub.setStyle("-fx-font-size: 12px; -fx-text-fill: " + MUTED + ";");
         titleBlock.getChildren().addAll(title, sub);
         header.getChildren().add(titleBlock);
@@ -106,99 +93,10 @@ public class TriageView {
 
     // ── Body ───────────────────────────────────────────────────────────────
 
-    private HBox buildBody() {
-        HBox body = new HBox(0);
-        VBox.setVgrow(body, Priority.ALWAYS);
-        VBox configPanel  = buildConfigPanel();
+    private Node buildBody() {
         VBox resultsPanel = buildResultsPanel();
-        HBox.setHgrow(resultsPanel, Priority.ALWAYS);
-        body.getChildren().addAll(configPanel, resultsPanel);
-        return body;
-    }
-
-    // ── Config panel (left) ────────────────────────────────────────────────
-
-    private VBox buildConfigPanel() {
-        VBox panel = new VBox(16);
-        panel.setPrefWidth(300);
-        panel.setMinWidth(260);
-        panel.setPadding(new Insets(24, 20, 24, 28));
-        panel.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 1 0 0;");
-
-        Label connHeading = sectionHeading("Ollama Connection");
-
-        ollamaUrlField = new TextField(ctx.getOllamaUrl());
-        ollamaUrlField.setPromptText("http://localhost:11434");
-        styleField(ollamaUrlField);
-
-        ollamaModelField = new TextField(ctx.getOllamaModel());
-        ollamaModelField.setPromptText("qwen3:8b");
-        styleField(ollamaModelField);
-
-        connectionStatus = new Label("Using: " + ctx.triageStrategy().getModelName());
-        connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + GREEN
-            + "; -fx-font-weight: bold;");
-
-        Button checkBtn = secondaryBtn("Check Connection");
-        checkBtn.setMaxWidth(Double.MAX_VALUE);
-        checkBtn.setOnAction(e -> checkConnection());
-
-        Label runHeading = sectionHeading("Triage Run");
-
-        runNameField = new TextField("Evaluation Run " + LocalDateTime.now().toLocalDate());
-        styleField(runNameField);
-
-        long findingCount = countAllFindings();
-        Label sampleInfo = new Label(findingCount + " findings available\n(all will be triaged)");
-        sampleInfo.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
-        sampleInfo.setWrapText(true);
-
-        // ── Run + Stop buttons side by side ───────────────────────────────
-        runBtn = primaryBtn("▶  Run LLM Triage");
-        runBtn.setMaxWidth(Double.MAX_VALUE);
-        runBtn.setPrefHeight(44);
-        runBtn.setOnAction(e -> runTriage());
-
-        stopBtn = new Button("⏹  Stop");
-        stopBtn.setMaxWidth(Double.MAX_VALUE);
-        stopBtn.setPrefHeight(44);
-        stopBtn.setDisable(true);
-        stopBtn.setStyle("-fx-background-color: #FEF2F2; -fx-text-fill: " + RED + "; "
-            + "-fx-background-radius: 6; -fx-font-size: 13px; -fx-font-weight: bold; "
-            + "-fx-border-color: #FECACA; -fx-border-radius: 6;");
-        stopBtn.setOnAction(e -> stopTriage());
-
-        HBox btnRow = new HBox(8, runBtn, stopBtn);
-        HBox.setHgrow(runBtn,  Priority.ALWAYS);
-        HBox.setHgrow(stopBtn, Priority.SOMETIMES);
-
-        progressBar = new ProgressBar(0);
-        progressBar.setPrefWidth(Double.MAX_VALUE);
-        progressBar.setVisible(false);
-        progressBar.setStyle("-fx-accent: " + BLUE + ";");
-
-        progressLabel = new Label("");
-        progressLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
-        progressLabel.setWrapText(true);
-
-        statusLabel = new Label("Configure Ollama and click Run.");
-        statusLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
-        statusLabel.setWrapText(true);
-
-        panel.getChildren().addAll(
-            connHeading,
-            fieldLabel("Ollama URL"), ollamaUrlField,
-            fieldLabel("Model"), ollamaModelField,
-            connectionStatus, checkBtn,
-            new Separator(),
-            runHeading,
-            fieldLabel("Run Name"), runNameField,
-            sampleInfo,
-            new Separator(),
-            btnRow, progressBar, progressLabel, statusLabel
-        );
-        return panel;
+        VBox.setVgrow(resultsPanel, Priority.ALWAYS);
+        return resultsPanel;
     }
 
     // ── Results panel (right) ──────────────────────────────────────────────
@@ -224,14 +122,14 @@ public class TriageView {
         repoFilter.getItems().add("All Repositories");
         repoFilter.getSelectionModel().selectFirst();
         repoFilter.setStyle("-fx-font-size: 12px;");
-        repoFilter.setOnAction(e -> {
-            String selected = repoFilter.getValue();
-            if (selected == null || selected.equals("All Repositories")) {
-                filteredRows.setPredicate(r -> true);
-            } else {
-                filteredRows.setPredicate(r -> selected.equals(r.getRepoName()));
-            }
-        });
+        repoFilter.setOnAction(e -> applyFilters());
+
+        versionFilter = new ComboBox<>();
+        versionFilter.getItems().add("All Versions");
+        versionFilter.getSelectionModel().selectFirst();
+        versionFilter.setPrefWidth(120);
+        versionFilter.setStyle("-fx-font-size: 12px;");
+        versionFilter.setOnAction(e -> applyFilters());
 
         Button refreshResultsBtn = secondaryBtn("↻  Refresh");
         refreshResultsBtn.setOnAction(e -> loadExistingResults());
@@ -243,7 +141,7 @@ public class TriageView {
         selectionLabel.setVisible(false);
         selectionLabel.setManaged(false);
 
-        headingRow.getChildren().addAll(heading, hint, spacer, selectionLabel, repoFilter, refreshResultsBtn);
+        headingRow.getChildren().addAll(heading, hint, spacer, selectionLabel, versionFilter, repoFilter, refreshResultsBtn);
 
         TableView<ResultRow> table = new TableView<>(filteredRows);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
@@ -268,13 +166,28 @@ public class TriageView {
             return row;
         });
 
-        TableColumn<ResultRow, String> verdictCol   = col("Verdict",    "verdict",    80);
-        TableColumn<ResultRow, String> confCol      = col("Confidence", "confidence", 80);
-        TableColumn<ResultRow, String> triagedCol   = col("Triaged",    "triagedAt",  110);
-        TableColumn<ResultRow, String> repoCol      = col("Repository", "repoName",   160);
-        TableColumn<ResultRow, String> fileCol      = col("File",       "filePath",   180);
-        TableColumn<ResultRow, String> ruleCol      = col("Rule",       "ruleId",     200);
-        TableColumn<ResultRow, String> reasonCol    = col("Reasoning",  "reasoning",  0);
+        TableColumn<ResultRow, String> versionCol   = col("Version",    "promptVersion",  75);
+        TableColumn<ResultRow, String> modelCol     = col("Model",      "modelUsed",     135);
+        TableColumn<ResultRow, String> verdictCol   = col("Verdict",    "verdict",        75);
+        TableColumn<ResultRow, String> confCol      = col("Confidence", "confidence",    100);
+        TableColumn<ResultRow, String> triagedCol   = col("Triaged",    "triagedAt",     110);
+        TableColumn<ResultRow, String> repoCol      = col("Repository", "repoName",      140);
+        TableColumn<ResultRow, String> fileCol      = col("File",       "filePath",      155);
+        TableColumn<ResultRow, String> ruleCol      = col("Rule",       "ruleId",        155);
+        TableColumn<ResultRow, String> reasonCol    = col("Reasoning",  "reasoning",       0);
+        reasonCol.setMaxWidth(350);
+
+        versionCol.setCellFactory(tc -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) { setText(null); setStyle(""); return; }
+                setText(item);
+                setStyle("v2.0".equals(item)
+                    ? "-fx-text-fill: #7C3AED; -fx-font-weight: bold;"
+                    : "-fx-text-fill: " + BLUE + "; -fx-font-weight: bold;");
+            }
+        });
 
         verdictCol.setCellFactory(tc -> new TableCell<>() {
             @Override
@@ -290,7 +203,7 @@ public class TriageView {
             }
         });
 
-        table.getColumns().addAll(verdictCol, confCol, triagedCol, repoCol, fileCol, ruleCol, reasonCol);
+        table.getColumns().addAll(versionCol, modelCol, verdictCol, confCol, triagedCol, repoCol, fileCol, ruleCol, reasonCol);
 
         // Delete key — removes selected rows from table AND from DB
         table.setOnKeyPressed(event -> {
@@ -319,223 +232,15 @@ public class TriageView {
         return panel;
     }
 
-    // ── Stop ───────────────────────────────────────────────────────────────
+    // ── Filters ────────────────────────────────────────────────────────────
 
-    private void stopTriage() {
-        if (currentTask != null && currentTask.isRunning()) {
-            currentTask.cancel(true);
-            ctx.setTriageRunning(false);
-            setRunningState(false, "Triage stopped. Results so far are saved — click Run to resume.");
-        }
-    }
-
-    // ── Check connection ───────────────────────────────────────────────────
-
-    private void checkConnection() {
-        String url   = ollamaUrlField.getText().trim();
-        String model = ollamaModelField.getText().trim();
-
-        connectionStatus.setText("Checking…");
-        connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
-
-        Task<Boolean> task = new Task<>() {
-            @Override protected Boolean call() {
-                return new OllamaTriageStrategy(url, model).isAvailable();
-            }
-        };
-
-        task.setOnSucceeded(e -> Platform.runLater(() -> {
-            boolean ok = task.getValue();
-            if (ok) {
-                connectionStatus.setText("✓ Connected — " + model + " ready");
-                connectionStatus.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; "
-                    + "-fx-text-fill: " + GREEN + ";");
-                ctx.enableOllama(url, model);
-            } else {
-                connectionStatus.setText("✗ Cannot reach Ollama at " + url
-                    + "\nMake sure Ollama is running: ollama serve");
-                connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + RED + ";");
-            }
-        }));
-        task.setOnFailed(e -> Platform.runLater(() -> {
-            connectionStatus.setText("✗ Error: " + task.getException().getMessage());
-            connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + RED + ";");
-        }));
-        new Thread(task, "ollama-check").start();
-    }
-
-    // ── Run triage ─────────────────────────────────────────────────────────
-
-    private void runTriage() {
-        String url   = ollamaUrlField.getText().trim();
-        String model = ollamaModelField.getText().trim();
-        String name  = runNameField.getText().trim();
-
-        if (name.isBlank()) { setStatus("Please enter a run name."); return; }
-
-        List<Finding> allFindings = new ArrayList<>();
-        java.util.Map<Long, String> findingRepoName = new java.util.HashMap<>();
-        ctx.repositoryRepo().findAll().forEach(repo -> {
-            String rn = repo.getName() != null ? repo.getName() : "Unknown";
-            List<Finding> repoFindings = ctx.findingRepo().findByRepositoryId(repo.getId());
-            repoFindings.forEach(f -> findingRepoName.put(f.getId(), rn));
-            allFindings.addAll(repoFindings);
-        });
-
-        if (allFindings.isEmpty()) {
-            setStatus("No findings found. Run a scan first.");
-            return;
-        }
-
-        List<Finding> sample = new ArrayList<>(allFindings);
-
-        EvaluationRun run = new EvaluationRun(name,
-            "LLM triage using " + model + " on " + sample.size() + " findings");
-        ctx.evalRepo().save(run);
-        sample.forEach(f -> ctx.evalRepo().saveSampleFinding(run.getId(), f.getId()));
-
-        TriageStrategy strategy = (!url.isBlank() && !model.isBlank())
-            ? new OllamaTriageStrategy(url, model)
-            : ctx.triageStrategy();
-
-        long alreadyDone = sample.stream()
-            .filter(f -> ctx.llmRepo().existsByFindingId(f.getId())).count();
-        String startMsg = alreadyDone > 0
-            ? "Resuming — " + alreadyDone + " already triaged, "
-                + (sample.size() - alreadyDone) + " remaining…"
-            : "Starting triage on " + sample.size() + " findings…";
-
-        resultRows.clear();
-        setRunningState(true, startMsg);
-        ctx.setTriageRunning(true);
-
-        currentTask = new Task<>() {
-            @Override
-            protected Void call() {
-                int total   = sample.size();
-                int processed = 0;
-                int delayMs = com.vulntriage.config.AppConfig.getInstance().getTriageDelayMs();
-
-                for (Finding finding : sample) {
-                    if (isCancelled()) break;
-
-                    // Crash resume — skip and display existing result
-                    if (ctx.llmRepo().existsByFindingId(finding.getId())) {
-                        ctx.llmRepo().findByFindingId(finding.getId()).ifPresent(existing -> {
-                            ResultRow row = new ResultRow(
-                                finding.getId(),
-                                existing.getLlmVerdict().name(),
-                                existing.getConfidence() + "%",
-                                findingRepoName.getOrDefault(finding.getId(), ""),
-                                finding.getFilePath() != null ? finding.getFilePath() : "",
-                                finding.getRuleId()   != null ? finding.getRuleId()   : "",
-                                existing.getReasoning() != null
-                                    ? existing.getReasoning().substring(0,
-                                        Math.min(120, existing.getReasoning().length())) : "",
-                                existing.getCreatedAt() != null
-                                    ? existing.getCreatedAt().format(DATE_FMT) : "—"
-                            );
-                            Platform.runLater(() -> resultRows.add(row));
-                        });
-                        processed++;
-                        final int done = processed;
-                        Platform.runLater(() ->
-                            progressLabel.setText(done + " / " + total + " (resuming…)"));
-                        continue;
-                    }
-
-                    // ── Inference — no UI work ────────────────────────────
-                    ResultRow row = null;
-                    try {
-                        TriageResult result = strategy.triage(finding);
-
-                        LlmResult llmResult = new LlmResult();
-                        llmResult.setFindingId      (finding.getId());
-                        llmResult.setEvaluationRunId(run.getId());
-                        llmResult.setLlmVerdict     (result.getVerdict());
-                        llmResult.setConfidence     (result.getConfidence());
-                        llmResult.setReasoning      (result.getReasoning());
-                        llmResult.setRemediation    (result.getRemediation());
-                        llmResult.setModelUsed      (strategy.getModelName());
-                        llmResult.setPromptVersion  (PromptBuilder.PROMPT_VERSION);
-                        llmResult.setCreatedAt      (LocalDateTime.now());
-                        ctx.llmRepo().save(llmResult);
-
-                        row = new ResultRow(
-                            finding.getId(),
-                            result.getVerdict().name(),
-                            result.getConfidence() + "%",
-                            findingRepoName.getOrDefault(finding.getId(), ""),
-                            finding.getFilePath() != null ? finding.getFilePath() : "",
-                            finding.getRuleId()   != null ? finding.getRuleId()   : "",
-                            result.getReasoning() != null
-                                ? result.getReasoning().substring(0,
-                                    Math.min(120, result.getReasoning().length())) : "",
-                            LocalDateTime.now().format(DATE_FMT)
-                        );
-                    } catch (Exception e) {
-                        updateMessage("Warning: failed to triage finding "
-                            + finding.getId() + ": " + e.getMessage());
-                    }
-
-                    processed++;
-                    final int done     = processed;
-                    final ResultRow fr = row;
-
-                    // ── Delay — UI updates mid-delay when GPU is idle ─────
-                    if (delayMs > 0 && processed < total) {
-                        try {
-                            Thread.sleep(delayMs / 2);
-                            Platform.runLater(() -> {
-                                if (fr != null) resultRows.add(0, fr);
-                                progressBar.setProgress((double) done / total);
-                                progressLabel.setText(done + " / " + total + " findings processed");
-                            });
-                            Thread.sleep(delayMs / 2);
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            break;
-                        }
-                    } else {
-                        Platform.runLater(() -> {
-                            if (fr != null) resultRows.add(0, fr);
-                            progressBar.setProgress((double) done / total);
-                            progressLabel.setText(done + " / " + total + " findings processed");
-                        });
-                    }
-
-                    // Extra cooldown every 50 findings
-                    if (processed % 50 == 0 && processed < total) {
-                        Platform.runLater(() ->
-                            progressLabel.setText(done + " / " + total + " — cooling down 10s…"));
-                        try { Thread.sleep(10_000); }
-                        catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            break;
-                        }
-                    }
-                }
-                return null;
-            }
-        };
-
-        currentTask.setOnSucceeded(e -> Platform.runLater(() -> {
-            ctx.setTriageRunning(false);
-            setRunningState(false, "Triage complete. Go to Evaluate to see metrics.");
-        }));
-        currentTask.setOnFailed(e -> Platform.runLater(() -> {
-            ctx.setTriageRunning(false);
-            setRunningState(false, "Triage failed: " + currentTask.getException().getMessage());
-        }));
-        currentTask.setOnCancelled(e -> Platform.runLater(() -> {
-            ctx.setTriageRunning(false);
-            setRunningState(false, "Stopped. Results saved — click Run to resume.");
-        }));
-
-        Thread t = new Thread(currentTask, "triage-thread");
-        t.setDaemon(true);
-        t.setPriority(Thread.MIN_PRIORITY);
-        t.start();
+    private void applyFilters() {
+        String repo = repoFilter    != null ? repoFilter.getValue()    : null;
+        String ver  = versionFilter != null ? versionFilter.getValue() : null;
+        filteredRows.setPredicate(r ->
+            (repo == null || "All Repositories".equals(repo) || repo.equals(r.getRepoName())) &&
+            (ver  == null || "All Versions".equals(ver)      || ver.equals(r.getPromptVersion()))
+        );
     }
 
     // ── Detail dialog ──────────────────────────────────────────────────────
@@ -564,12 +269,13 @@ public class TriageView {
         HBox meta = new HBox(24);
         meta.setAlignment(Pos.CENTER_LEFT);
         meta.getChildren().addAll(
-            detailChip("Severity",   finding.getSeverity() != null ? finding.getSeverity().name() : "—"),
-            detailChip("Category",   finding.getCategory() != null ? finding.getCategory() : "—"),
-            detailChip("Line",       finding.getLineNumber() != null ? String.valueOf(finding.getLineNumber()) : "—"),
-            detailChip("LLM Verdict", llm.getLlmVerdict() != null ? llm.getLlmVerdict().name() : "—"),
-            detailChip("Confidence", llm.getConfidence() + "%"),
-            detailChip("Model",      llm.getModelUsed() != null ? llm.getModelUsed() : "—")
+            detailChip("Severity",       finding.getSeverity() != null ? finding.getSeverity().name() : "—"),
+            detailChip("Category",       finding.getCategory() != null ? finding.getCategory() : "—"),
+            detailChip("Line",           finding.getLineNumber() != null ? String.valueOf(finding.getLineNumber()) : "—"),
+            detailChip("LLM Verdict",    llm.getLlmVerdict() != null ? llm.getLlmVerdict().name() : "—"),
+            detailChip("Confidence",     llm.getConfidence() + "%"),
+            detailChip("Model",          llm.getModelUsed() != null ? llm.getModelUsed() : "—"),
+            detailChip("Prompt Version", llm.getPromptVersion() != null ? llm.getPromptVersion() : "—")
         );
 
         // ── Message ────────────────────────────────────────────────────────
@@ -641,34 +347,45 @@ public class TriageView {
     // ── Load existing results from DB ──────────────────────────────────────
 
     private void loadExistingResults() {
-        if (currentTask != null && currentTask.isRunning()) return; // don't overwrite live run
-
-        List<ResultRow> loaded = new ArrayList<>();
+        // Build finding lookup maps once (repo names, file paths, rule IDs)
+        java.util.Map<Long, com.vulntriage.domain.Finding> findingById = new java.util.HashMap<>();
+        java.util.Map<Long, String> repoByFindingId = new java.util.HashMap<>();
         java.util.Set<String> repoNames = new java.util.LinkedHashSet<>();
 
         ctx.repositoryRepo().findAll().forEach(repo -> {
             String repoName = repo.getName() != null ? repo.getName() : "Unknown";
             repoNames.add(repoName);
             ctx.findingRepo().findByRepositoryId(repo.getId()).forEach(f -> {
-                ctx.llmRepo().findByFindingId(f.getId()).ifPresent(llm -> {
-                    String reasoning = llm.getReasoning() != null
-                        ? llm.getReasoning().substring(0, Math.min(120, llm.getReasoning().length()))
-                        : "";
-                    String triagedAt = llm.getCreatedAt() != null
-                        ? llm.getCreatedAt().format(DATE_FMT) : "—";
-                    loaded.add(new ResultRow(
-                        f.getId(),
-                        llm.getLlmVerdict() != null ? llm.getLlmVerdict().name() : "—",
-                        llm.getConfidence() + "%",
-                        repoName,
-                        f.getFilePath() != null ? f.getFilePath() : "",
-                        f.getRuleId()   != null ? f.getRuleId()   : "",
-                        reasoning,
-                        triagedAt
-                    ));
-                });
+                findingById.put(f.getId(), f);
+                repoByFindingId.put(f.getId(), repoName);
             });
         });
+
+        // Load all LLM results across every prompt version so the table stays complete
+        // regardless of how many prompt versions exist (v1.0, v2.0, v3.0, …).
+        List<com.vulntriage.domain.LlmResult> allResults = ctx.llmRepo().findAll();
+
+        List<ResultRow> loaded = new ArrayList<>();
+        for (com.vulntriage.domain.LlmResult llm : allResults) {
+            com.vulntriage.domain.Finding f = findingById.get(llm.getFindingId());
+            if (f == null) continue; // orphaned result — finding was deleted
+            String reasoning = llm.getReasoning() != null
+                ? llm.getReasoning().substring(0, Math.min(120, llm.getReasoning().length())) : "";
+            String triagedAt = llm.getCreatedAt() != null
+                ? llm.getCreatedAt().format(DATE_FMT) : "—";
+            loaded.add(new ResultRow(
+                f.getId(),
+                llm.getLlmVerdict() != null ? llm.getLlmVerdict().name() : "—",
+                llm.getConfidence() + "%",
+                repoByFindingId.getOrDefault(f.getId(), ""),
+                f.getFilePath() != null ? f.getFilePath() : "",
+                f.getRuleId()   != null ? f.getRuleId()   : "",
+                reasoning,
+                triagedAt,
+                llm.getPromptVersion() != null ? llm.getPromptVersion() : "v1.0",
+                llm.getModelUsed() != null ? llm.getModelUsed() : ""
+            ));
+        }
 
         resultRows.setAll(loaded);
 
@@ -684,26 +401,30 @@ public class TriageView {
             }
         }
 
-        if (!loaded.isEmpty()) {
-            setStatus(loaded.size() + " findings triaged — run again to re-triage, or delete rows to re-do individual ones.");
+        // Rebuild version filter from versions actually present in results
+        if (versionFilter != null) {
+            String currentVer = versionFilter.getValue();
+            java.util.List<String> versions = loaded.stream()
+                .map(ResultRow::getPromptVersion)
+                .filter(v -> v != null && !v.isBlank())
+                .distinct()
+                .sorted()
+                .collect(java.util.stream.Collectors.toList());
+            // Disable listener during rebuild to prevent mid-setAll onAction firing
+            versionFilter.setOnAction(null);
+            versionFilter.getItems().setAll("All Versions");
+            versionFilter.getItems().addAll(versions);
+            if (currentVer != null && !currentVer.equals("All Versions")
+                    && versionFilter.getItems().contains(currentVer))
+                versionFilter.setValue(currentVer);
+            else
+                versionFilter.getSelectionModel().selectFirst();
+            versionFilter.setOnAction(e -> applyFilters());
         }
+
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
-
-    private long countAllFindings() {
-        return ctx.repositoryRepo().findAll().stream()
-            .mapToLong(r -> ctx.findingRepo().findByRepositoryId(r.getId()).size()).sum();
-    }
-
-    private void setRunningState(boolean running, String message) {
-        runBtn.setDisable(running);
-        stopBtn.setDisable(!running);
-        progressBar.setVisible(running || progressBar.getProgress() > 0);
-        setStatus(message);
-    }
-
-    private void setStatus(String msg) { statusLabel.setText(msg); }
 
     private void styleField(TextField f) {
         f.setStyle("-fx-font-size: 12px; -fx-border-color: #E5E7EB; "
@@ -720,13 +441,6 @@ public class TriageView {
         Label l = new Label(text);
         l.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #374151;");
         return l;
-    }
-
-    private Button primaryBtn(String text) {
-        Button b = new Button(text);
-        b.setStyle("-fx-background-color: " + BLUE + "; -fx-text-fill: white; "
-            + "-fx-background-radius: 6; -fx-font-size: 13px; -fx-font-weight: bold;");
-        return b;
     }
 
     private Button secondaryBtn(String text) {
@@ -755,27 +469,34 @@ public class TriageView {
         private final String ruleId;
         private final String reasoning;
         private final String triagedAt;
+        private final String promptVersion;
+        private final String modelUsed;
 
         public ResultRow(long findingId, String verdict, String confidence,
                          String repoName, String filePath, String ruleId,
-                         String reasoning, String triagedAt) {
-            this.findingId  = findingId;
-            this.verdict    = verdict;
-            this.confidence = confidence;
-            this.repoName   = repoName;
-            this.filePath   = filePath;
-            this.ruleId     = ruleId;
-            this.reasoning  = reasoning;
-            this.triagedAt  = triagedAt;
+                         String reasoning, String triagedAt, String promptVersion,
+                         String modelUsed) {
+            this.findingId     = findingId;
+            this.verdict       = verdict;
+            this.confidence    = confidence;
+            this.repoName      = repoName;
+            this.filePath      = filePath;
+            this.ruleId        = ruleId;
+            this.reasoning     = reasoning;
+            this.triagedAt     = triagedAt;
+            this.promptVersion = promptVersion;
+            this.modelUsed     = modelUsed;
         }
 
-        public long   getFindingId()  { return findingId; }
-        public String getVerdict()    { return verdict; }
-        public String getConfidence() { return confidence; }
-        public String getRepoName()   { return repoName; }
-        public String getFilePath()   { return filePath; }
-        public String getRuleId()     { return ruleId; }
-        public String getReasoning()  { return reasoning; }
-        public String getTriagedAt()  { return triagedAt; }
+        public long   getFindingId()     { return findingId; }
+        public String getVerdict()       { return verdict; }
+        public String getConfidence()    { return confidence; }
+        public String getRepoName()      { return repoName; }
+        public String getFilePath()      { return filePath; }
+        public String getRuleId()        { return ruleId; }
+        public String getReasoning()     { return reasoning; }
+        public String getTriagedAt()     { return triagedAt; }
+        public String getPromptVersion() { return promptVersion; }
+        public String getModelUsed()     { return modelUsed; }
     }
 }

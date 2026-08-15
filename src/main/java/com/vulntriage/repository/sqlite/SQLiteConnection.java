@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -170,9 +171,22 @@ public class SQLiteConnection {
                 )
             """);
 
+            stmt.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS prompt_templates (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name        TEXT    NOT NULL,
+                    version     TEXT    NOT NULL UNIQUE,
+                    description TEXT,
+                    template    TEXT    NOT NULL,
+                    built_in    INTEGER NOT NULL DEFAULT 0,
+                    created_at  TEXT    NOT NULL
+                )
+            """);
+
             log.info("Database schema initialised successfully");
         }
         migrateSchema();
+        seedBuiltInPrompts();
     }
 
     /**
@@ -181,6 +195,25 @@ public class SQLiteConnection {
      */
     private void migrateSchema() {
         try (Statement stmt = connection.createStatement()) {
+            // Migration: create prompt_templates table for existing DBs that pre-date this feature
+            boolean hasPromptTemplates = connection.getMetaData()
+                .getTables(null, null, "prompt_templates", null).next();
+            if (!hasPromptTemplates) {
+                stmt.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS prompt_templates (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name        TEXT    NOT NULL,
+                        version     TEXT    NOT NULL UNIQUE,
+                        description TEXT,
+                        template    TEXT    NOT NULL,
+                        built_in    INTEGER NOT NULL DEFAULT 0,
+                        created_at  TEXT    NOT NULL
+                    )
+                """);
+                log.info("Schema migration: created prompt_templates table");
+                seedBuiltInPrompts();
+            }
+
             // Migration: add cwe column if missing (added in week-10 for thesis dataset)
             boolean hasCwe = connection.getMetaData()
                 .getColumns(null, null, "findings", "cwe")
@@ -216,6 +249,105 @@ public class SQLiteConnection {
             }
         } catch (SQLException e) {
             log.warn("Schema migration check failed (non-fatal): {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Insert the two built-in prompt templates (v1.0 snippet-only, v2.0 context-enriched)
+     * if they do not already exist. Safe to run on every startup — the UNIQUE constraint
+     * on `version` prevents duplicates and INSERT OR IGNORE handles the conflict silently.
+     */
+    private void seedBuiltInPrompts() {
+        String v1Template = """
+            You are a senior application security engineer reviewing a static analysis finding.
+
+            Your task is to determine whether this finding is a genuine vulnerability.
+
+            Analyze the following Semgrep finding carefully:
+
+            Rule ID  : {{rule_id}}
+            Severity : {{severity}}
+            Category : {{category}}
+            Message  : {{message}}
+            Code     : {{code_snippet}}
+
+            Instructions:
+            1. Decide if this is a True Positive (TP), False Positive (FP), or needs Review (REVIEW).
+               - TP: the code is genuinely vulnerable and exploitable.
+               - FP: the code is safe — the rule fired incorrectly (e.g. framework handles escaping).
+               - REVIEW: insufficient context to decide with confidence.
+            2. Assign a confidence score from 0 to 100.
+               Note: this is your subjective certainty, not a calibrated probability.
+            3. Briefly explain your reasoning (1-3 sentences).
+            4. If TP, suggest a concrete remediation. If FP, explain why it is safe.
+
+            Return ONLY valid JSON — no preamble, no markdown, no explanation outside the JSON:
+            {
+              "llm_verdict": "TP" or "FP" or "REVIEW",
+              "llm_confidence": <integer 0-100>,
+              "llm_reasoning": "<your reasoning>",
+              "llm_remediation": "<fix suggestion or explanation>"
+            }
+            """;
+
+        String v2Template = """
+            /no_think
+            You are a senior application security engineer. Classify this static analysis finding.
+
+            IMPORTANT: Output ONLY the JSON object below. No markdown, no prose, no explanation outside the JSON.
+
+            === FINDING ===
+            Rule ID  : {{rule_id}}
+            Severity : {{severity}}
+            Category : {{category}}
+            Message  : {{message}}
+            Flagged line ({{line_number}}):
+            {{code_snippet}}
+
+            === SOURCE CONTEXT ({{file_path}}) ===
+            {{source_context}}
+
+            Use the source context to check:
+            - Is Django auto-escaping active? (no |safe filter, no autoescape off)
+            - Is the variable user-controlled or from a trusted/framework source?
+            - Is there login_required or permission checks restricting access?
+            - Is this test code (setUp, test helpers) rather than production code?
+
+            Verdict options: TP (genuinely exploitable), FP (safe in context), REVIEW (still uncertain).
+
+            Return ONLY this JSON — start with { and end with }, nothing else:
+            {
+              "llm_verdict": "TP" or "FP" or "REVIEW",
+              "llm_confidence": <integer 0-100>,
+              "llm_reasoning": "<1-2 sentences referencing specific context>",
+              "llm_remediation": "<fix if TP, or why safe if FP>"
+            }
+            """;
+
+        String sql = """
+            INSERT OR IGNORE INTO prompt_templates (name, version, description, template, built_in, created_at)
+            VALUES (?, ?, ?, ?, 1, ?)
+            """;
+        String now = java.time.LocalDateTime.now().toString();
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, "Snippet-Only Prompt");
+            ps.setString(2, "v1.0");
+            ps.setString(3, "Original prompt — sends only the 7-line code snippet. Fast, uses minimal context.");
+            ps.setString(4, v1Template);
+            ps.setString(5, now);
+            ps.executeUpdate();
+
+            ps.setString(1, "Context-Enriched Prompt");
+            ps.setString(2, "v2.0");
+            ps.setString(3, "Context-enriched prompt — sends 80 lines before/after the flagged line. "
+                + "Uses {{source_context}} placeholder; requires Repos Base Path to be set in Triage.");
+            ps.setString(4, v2Template);
+            ps.setString(5, now);
+            ps.executeUpdate();
+
+            log.debug("Built-in prompt templates seeded (or already present)");
+        } catch (SQLException e) {
+            log.warn("Failed to seed built-in prompt templates (non-fatal): {}", e.getMessage());
         }
     }
 }

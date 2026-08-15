@@ -116,6 +116,50 @@ public class SQLiteLlmResultRepository implements LlmResultRepository {
     }
 
     @Override
+    public Optional<LlmResult> findByFindingIdAndPromptVersion(long findingId, String promptVersion) {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT * FROM llm_results WHERE finding_id=? AND prompt_version=? ORDER BY id DESC LIMIT 1")) {
+            ps.setLong  (1, findingId);
+            ps.setString(2, promptVersion);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return Optional.of(map(rs));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to find LLM result for finding+version", e);
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public List<LlmResult> findAllByPromptVersion(String promptVersion) {
+        List<LlmResult> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT * FROM llm_results WHERE prompt_version = ? ORDER BY id ASC")) {
+            ps.setString(1, promptVersion);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(map(rs));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to find LLM results by prompt version", e);
+        }
+        return list;
+    }
+
+    @Override
+    public List<LlmResult> findAll() {
+        List<LlmResult> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT * FROM llm_results ORDER BY prompt_version ASC, id ASC")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(map(rs));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to fetch all LLM results", e);
+        }
+        return list;
+    }
+
+    @Override
     public void deleteByFindingId(long findingId) {
         try (PreparedStatement ps = conn.prepareStatement(
                 "DELETE FROM llm_results WHERE finding_id=?")) {
@@ -123,6 +167,30 @@ public class SQLiteLlmResultRepository implements LlmResultRepository {
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException("Failed to delete LLM result for finding", e);
+        }
+    }
+
+    @Override
+    public void deleteByFindingIdAndPromptVersion(long findingId, String promptVersion) {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "DELETE FROM llm_results WHERE finding_id=? AND prompt_version=?")) {
+            ps.setLong  (1, findingId);
+            ps.setString(2, promptVersion);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to delete LLM result for finding+version", e);
+        }
+    }
+
+    @Override
+    public void deleteByFindingIdAndRunId(long findingId, long evaluationRunId) {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "DELETE FROM llm_results WHERE finding_id=? AND evaluation_run_id=?")) {
+            ps.setLong(1, findingId);
+            ps.setLong(2, evaluationRunId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to delete LLM result for finding+run", e);
         }
     }
 

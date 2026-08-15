@@ -198,8 +198,22 @@ public class ProjectSelectorView {
             confirm.setHeaderText("Delete \"" + name + "\"?");
             confirm.showAndWait().ifPresent(btn -> {
                 if (btn == ButtonType.YES) {
-                    try { Files.deleteIfExists(db); } catch (Exception ex) {
-                        new Alert(Alert.AlertType.ERROR, "Could not delete:\n" + ex.getMessage()).showAndWait();
+                    // Close the SQLite connection if this is the currently open project,
+                    // otherwise Windows keeps a file lock and deletion fails.
+                    String activeUrl = System.getProperty("vulntriage.db.url", "");
+                    String activeFile = activeUrl.replace("jdbc:sqlite:", "");
+                    try {
+                        if (java.nio.file.Paths.get(activeFile).toAbsolutePath()
+                                .equals(db.toAbsolutePath())) {
+                            com.vulntriage.repository.sqlite.SQLiteConnection.reset();
+                        }
+                        Files.deleteIfExists(db);
+                        // Clean up SQLite WAL/SHM sidecar files if present
+                        Files.deleteIfExists(db.resolveSibling(db.getFileName() + "-wal"));
+                        Files.deleteIfExists(db.resolveSibling(db.getFileName() + "-shm"));
+                    } catch (Exception ex) {
+                        new Alert(Alert.AlertType.ERROR,
+                            "Could not delete:\n" + db + "\n\n" + ex.getMessage()).showAndWait();
                     }
                     refreshProjectList();
                 }

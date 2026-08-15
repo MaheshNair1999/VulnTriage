@@ -11,6 +11,7 @@ import com.vulntriage.repository.api.EvaluationRepository;
 import com.vulntriage.repository.api.LlmResultRepository;
 import com.vulntriage.triage.api.TriageResult;
 import com.vulntriage.triage.api.TriageStrategy;
+import com.vulntriage.triage.ollama.OllamaTriageStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,13 +41,16 @@ public class TriageStage extends AbstractPipelineStage {
     private final LlmResultRepository  llmRepo;
     private final String               runName;
     private final int                  delayMs;
+    /** When set, uses triageWithTemplate() instead of triage() so the stored prompt is applied. */
+    private final String               promptTemplateStr;
+    private final String               promptVersion;
 
     public TriageStage(List<PipelineObserver> observers,
                        TriageStrategy strategy,
                        EvaluationRepository evalRepo,
                        LlmResultRepository llmRepo,
                        String runName) {
-        this(observers, strategy, evalRepo, llmRepo, runName, DEFAULT_DELAY_MS);
+        this(observers, strategy, evalRepo, llmRepo, runName, DEFAULT_DELAY_MS, null, null);
     }
 
     public TriageStage(List<PipelineObserver> observers,
@@ -55,12 +59,25 @@ public class TriageStage extends AbstractPipelineStage {
                        LlmResultRepository llmRepo,
                        String runName,
                        int delayMs) {
+        this(observers, strategy, evalRepo, llmRepo, runName, delayMs, null, null);
+    }
+
+    public TriageStage(List<PipelineObserver> observers,
+                       TriageStrategy strategy,
+                       EvaluationRepository evalRepo,
+                       LlmResultRepository llmRepo,
+                       String runName,
+                       int delayMs,
+                       String promptTemplateStr,
+                       String promptVersion) {
         super(observers);
-        this.strategy = strategy;
-        this.evalRepo = evalRepo;
-        this.llmRepo  = llmRepo;
-        this.runName  = runName;
-        this.delayMs  = Math.max(0, delayMs);
+        this.strategy          = strategy;
+        this.evalRepo          = evalRepo;
+        this.llmRepo           = llmRepo;
+        this.runName           = runName;
+        this.delayMs           = Math.max(0, delayMs);
+        this.promptTemplateStr = promptTemplateStr;
+        this.promptVersion     = promptVersion;
     }
 
     @Override
@@ -96,10 +113,16 @@ public class TriageStage extends AbstractPipelineStage {
         log.info("TriageStage: processing {} findings with {}",
             sample.size(), strategy.getModelName());
 
+        boolean useTemplate = promptTemplateStr != null && !promptTemplateStr.isBlank()
+            && strategy instanceof OllamaTriageStrategy;
+
         int processed = 0;
         for (Finding finding : sample) {
             try {
-                TriageResult result = strategy.triage(finding);
+                TriageResult result = useTemplate
+                    ? ((OllamaTriageStrategy) strategy).triageWithTemplate(
+                        finding, promptTemplateStr, promptVersion, null)
+                    : strategy.triage(finding);
 
                 LlmResult llmResult = new LlmResult();
                 llmResult.setFindingId      (finding.getId());

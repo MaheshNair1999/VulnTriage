@@ -1,6 +1,7 @@
 package com.vulntriage.pipeline;
 
 import com.vulntriage.app.AppContext;
+import com.vulntriage.domain.PromptTemplate;
 import com.vulntriage.domain.WorkflowStep;
 import com.vulntriage.event.PipelineObserver;
 import com.vulntriage.pipeline.api.PipelineStage;
@@ -29,6 +30,12 @@ import java.util.List;
  *     scanner  — "semgrep" or "trivy" (required)
  *     ruleset  — Semgrep ruleset, default "p/security-audit"
  *     timeout  — seconds, default 300
+ *
+ *   SELECT:
+ *     scanner      — scanner name to filter by, or "all" (default)
+ *     repository   — exact repo name to filter by, or "all" (default)
+ *     rule_pattern — substring match against rule ID (case-insensitive); empty = all
+ *     severity     — comma-separated: ERROR, WARNING, INFO; or "all" (default)
  *
  *   FILTER:
  *     condition — filter expression string (required)
@@ -86,6 +93,14 @@ public class WorkflowStepFactory {
                 yield new ScanStage(observers, ctx.scanRunRepo(), ctx.findingRepo(), scanCfg);
             }
 
+            case SELECT -> new SelectStage(
+                observers,
+                step.param("scanner",      "all"),
+                step.param("repository",   "all"),
+                step.param("rule_pattern", ""),
+                step.param("severity",     "all")
+            );
+
             case FILTER -> new FilterStage(
                 observers,
                 step.param("condition", "severity >= INFO") // default: pass everything
@@ -96,14 +111,26 @@ public class WorkflowStepFactory {
                 Integer.parseInt(step.param("size", "1000"))
             );
 
-            case TRIAGE -> new TriageStage(
-                observers,
-                buildTriageStrategy(step),
-                ctx.evalRepo(),
-                ctx.llmRepo(),
-                step.param("run_name", "Workflow Run"),
-                com.vulntriage.config.AppConfig.getInstance().getTriageDelayMs()
-            );
+            case TRIAGE -> {
+                String promptVer = step.param("prompt_version", "v1.0");
+                PromptTemplate tmpl = ctx.promptTemplateRepo()
+                    .findByVersion(promptVer)
+                    .orElseGet(() -> ctx.promptTemplateRepo()
+                        .findByVersion("v1.0")
+                        .orElse(null));
+                String templateStr = tmpl != null ? tmpl.getTemplate() : null;
+                String templateVer = tmpl != null ? tmpl.getVersion()  : promptVer;
+                yield new TriageStage(
+                    observers,
+                    buildTriageStrategy(step),
+                    ctx.evalRepo(),
+                    ctx.llmRepo(),
+                    step.param("run_name", "Workflow Run"),
+                    com.vulntriage.config.AppConfig.getInstance().getTriageDelayMs(),
+                    templateStr,
+                    templateVer
+                );
+            }
 
             case SCORE -> new ScoreStage(
                 observers,

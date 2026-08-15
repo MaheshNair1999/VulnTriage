@@ -7,7 +7,9 @@ import com.vulntriage.ui.workflow.WorkflowView;
 import com.vulntriage.ui.review.ReviewView;
 import com.vulntriage.ui.settings.SettingsView;
 import com.vulntriage.ui.triage.TriageView;
+import com.vulntriage.ui.triage.TargetedTriageView;
 import com.vulntriage.ui.findings.FindingsView;
+import com.vulntriage.ui.prompts.PromptsView;
 import com.vulntriage.ui.repository.RepositoryView;
 import com.vulntriage.app.AppContext;
 import javafx.animation.Animation;
@@ -59,6 +61,9 @@ public class MainWindow {
         stage.setTitle("VulnTriage — " + currentProjectName());
         stage.setMinWidth (960);
         stage.setMinHeight(640);
+        // Force the WM maximize signal even if the property was already true
+        // (a stale true value from a previous run causes setMaximized(true) to be a no-op).
+        stage.setMaximized(false);
         stage.setMaximized(true);
         stage.show();
     }
@@ -71,6 +76,8 @@ public class MainWindow {
     }
 
     private void switchProject() {
+        // Always show the project selector as a small window, never maximized.
+        stage.setMaximized(false);
         ProjectSelectorView selector = new ProjectSelectorView(path -> Main.openProject(stage, path));
         stage.setTitle("VulnTriage — Select Project");
         stage.setScene(selector.build(stage));
@@ -116,7 +123,9 @@ public class MainWindow {
             {"⊕", "Repositories"},
             {"◈", "Findings"},
             {"✓", "Review"},
+            {"⌨", "Prompts"},
             {"◉", "Triage"},
+            {"⊚", "Triage Results"},
             {"⬡", "Workflows"},
             {"≡", "Evaluate"},
             {"⚙", "Settings"}
@@ -181,7 +190,7 @@ public class MainWindow {
 
     // Views that must always reload fresh data (not cached)
     private static final java.util.Set<String> NO_CACHE =
-        java.util.Set.of("Dashboard", "Findings", "Review");
+        java.util.Set.of("Dashboard", "Findings", "Review", "Evaluate");
 
     // Triage is cached as a singleton so background tasks survive navigation
     private Node triageViewNode;
@@ -201,14 +210,21 @@ public class MainWindow {
         });
 
         Node view;
-        if (name.equals("Triage")) {
-            // Always reuse the same node so the running task is never killed
-            if (triageViewNode == null) triageViewNode = createView("Triage");
-            view = triageViewNode;
-        } else if (NO_CACHE.contains(name)) {
-            view = createView(name);
-        } else {
-            view = viewCache.computeIfAbsent(name, this::createView);
+        try {
+            if (name.equals("Triage")) {
+                // Always reuse the same node so the running task is never killed
+                if (triageViewNode == null) triageViewNode = createView("Triage");
+                view = triageViewNode;
+            } else if (NO_CACHE.contains(name)) {
+                view = createView(name);
+            } else {
+                view = viewCache.computeIfAbsent(name, this::createView);
+            }
+        } catch (Throwable ex) {
+            view = buildErrorCard(name, ex);
+            // Clear cached broken node so the next click retries
+            viewCache.remove(name);
+            if (name.equals("Triage")) triageViewNode = null;
         }
         contentArea.getChildren().setAll(view);
     }
@@ -219,9 +235,11 @@ public class MainWindow {
             case "Repositories" -> new RepositoryView().build();
             case "Findings"     -> new FindingsView().build();
             case "Review"       -> new ReviewView().build();
-            case "Triage"       -> new TriageView().build();
+            case "Triage"        -> new TargetedTriageView().build();
+            case "Triage Results" -> new TriageView().build();
             case "Workflows"    -> new WorkflowView().build();
             case "Evaluate"     -> new EvaluationView().build();
+            case "Prompts"      -> new PromptsView().build();
             case "Settings"     -> new SettingsView().build();
             default             -> buildPlaceholder(name);
         };
@@ -236,7 +254,7 @@ public class MainWindow {
         box.setVisible(false);
         box.setManaged(false);
 
-        Label spinner = new Label("◉  LLM Triage");
+        Label spinner = new Label("◉  Triage");
         spinner.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; "
             + "-fx-text-fill: #60A5FA;");
 
@@ -250,7 +268,7 @@ public class MainWindow {
         final int[] idx = {0};
         Timeline anim = new Timeline(new KeyFrame(Duration.millis(400), e -> {
             idx[0] = (idx[0] + 1) % frames.length;
-            spinner.setText(frames[idx[0]] + "  LLM Triage");
+            spinner.setText(frames[idx[0]] + "  Triage");
         }));
         anim.setCycleCount(Animation.INDEFINITE);
 
@@ -341,6 +359,27 @@ public class MainWindow {
         Label sub = new Label("Coming in Week 6");
         sub.setStyle("-fx-font-size: 14px; -fx-text-fill: #D1D5DB;");
         box.getChildren().addAll(label, sub);
+        return box;
+    }
+
+    private Node buildErrorCard(String viewName, Throwable ex) {
+        VBox box = new VBox(10);
+        box.setAlignment(Pos.CENTER);
+        box.setPadding(new Insets(40));
+        box.setStyle("-fx-background-color: " + CONTENT_BG + ";");
+
+        Label title = new Label("Failed to open \"" + viewName + "\"");
+        title.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #DC2626;");
+
+        Label msg = new Label(ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName());
+        msg.setStyle("-fx-font-size: 12px; -fx-text-fill: #6B7280;");
+        msg.setWrapText(true);
+        msg.setMaxWidth(520);
+
+        Label hint = new Label("Click the nav item again to retry.");
+        hint.setStyle("-fx-font-size: 11px; -fx-text-fill: #9CA3AF; -fx-font-style: italic;");
+
+        box.getChildren().addAll(title, msg, hint);
         return box;
     }
 }
