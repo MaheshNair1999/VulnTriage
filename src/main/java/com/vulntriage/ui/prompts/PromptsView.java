@@ -97,7 +97,7 @@ public class PromptsView {
 
         listView = new ListView<>(templates);
         VBox.setVgrow(listView, Priority.ALWAYS);
-        listView.setStyle("-fx-background-color: white;");
+        listView.setStyle("-fx-background-color: " + CARD + ";");
         listView.setCellFactory(lv -> new ListCell<>() {
             @Override
             protected void updateItem(PromptTemplate item, boolean empty) {

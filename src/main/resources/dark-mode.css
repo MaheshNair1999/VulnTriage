@@ -4,9 +4,16 @@
 
 /* ── Table View ─────────────────────────────────────────────────────────── */
 .table-view {
-    -fx-background-color: #1E293B;
-    -fx-border-color: #334155;
-    -fx-border-width: 1;
+    /* Mirror Modena's multi-stop pattern: outer stop = border, inner stop = fill */
+    -fx-background-color: #334155, #1E293B;
+    -fx-background-insets: 0, 1;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.table-view:focused {
+    -fx-background-color: #3B82F6, #1E293B;
+    -fx-background-insets: 0, 2;
 }
 
 .table-view .column-header-background {
@@ -338,6 +345,64 @@
 
 .dialog-pane .content {
     -fx-background-color: #1E293B;
+}
+
+/* ── Charts ──────────────────────────────────────────────────────────────── */
+.chart {
+    -fx-background-color: #1E293B;
+    -fx-background-radius: 10;
+}
+
+.chart-content {
+    -fx-background-color: #1E293B;
+}
+
+.chart-plot-background {
+    -fx-background-color: #1E293B;
+}
+
+.chart-legend {
+    -fx-background-color: #1E293B;
+}
+
+.chart-legend-item-symbol {
+    -fx-background-radius: 5;
+}
+
+.chart-legend-item {
+    -fx-text-fill: #94A3B8;
+}
+
+.axis {
+    -fx-tick-label-fill: #94A3B8;
+}
+
+.axis-label {
+    -fx-text-fill: #94A3B8;
+}
+
+.chart-vertical-grid-lines,
+.chart-horizontal-grid-lines {
+    -fx-stroke: #334155;
+}
+
+.chart-vertical-zero-line,
+.chart-horizontal-zero-line {
+    -fx-stroke: #475569;
+}
+
+.chart-alternative-row-fill,
+.chart-alternative-column-fill {
+    -fx-fill: transparent;
+    -fx-stroke: transparent;
+}
+
+.chart-pie-label {
+    -fx-fill: #E2E8F0;
+}
+
+.chart-pie-label-line {
+    -fx-stroke: #94A3B8;
 }
 
 /* ── Root / Scene ────────────────────────────────────────────────────────── */

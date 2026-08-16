@@ -499,7 +499,7 @@ public class ReviewView {
         Button b = new Button(text);
         b.setMaxWidth(Double.MAX_VALUE);
         b.setPrefHeight(52);
-        b.setStyle("-fx-background-color: white; -fx-text-fill: " + color + "; "
+        b.setStyle("-fx-background-color: " + CARD + "; -fx-text-fill: " + color + "; "
             + "-fx-font-size: 13px; -fx-font-weight: bold; -fx-background-radius: 8; "
             + "-fx-border-color: " + color + "; -fx-border-radius: 8; "
             + "-fx-border-width: 1.5; -fx-font-family: '" + MONO + "';");
@@ -511,7 +511,7 @@ public class ReviewView {
             + "-fx-border-color: " + color + "; -fx-border-radius: 8; "
             + "-fx-border-width: 1.5; -fx-font-family: '" + MONO + "';"));
         b.setOnMouseExited(e -> b.setStyle(
-            "-fx-background-color: white; -fx-text-fill: " + color + "; "
+            "-fx-background-color: " + CARD + "; -fx-text-fill: " + color + "; "
             + "-fx-font-size: 13px; -fx-font-weight: bold; -fx-background-radius: 8; "
             + "-fx-border-color: " + color + "; -fx-border-radius: 8; "
             + "-fx-border-width: 1.5; -fx-font-family: '" + MONO + "';"));

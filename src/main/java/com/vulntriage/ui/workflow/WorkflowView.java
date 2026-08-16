@@ -171,7 +171,7 @@ public class WorkflowView {
         for (StepDef def : defs) {
             Button btn = new Button(def.label());
             btn.setStyle(
-                "-fx-background-color: white; -fx-text-fill: " + def.color() + "; "
+                "-fx-background-color: " + CARD + "; -fx-text-fill: " + def.color() + "; "
                 + "-fx-background-radius: 6; -fx-font-size: 11px; -fx-padding: 6 10; "
                 + "-fx-border-color: " + def.color() + "; -fx-border-radius: 6; "
                 + "-fx-border-width: 1;");
@@ -186,7 +186,7 @@ public class WorkflowView {
     private VBox buildStepsList() {
         VBox list = new VBox(6);
         list.setPrefHeight(260);
-        list.setStyle("-fx-background-color: white; -fx-background-radius: 8; "
+        list.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 8; "
             + "-fx-padding: 10; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 6, 0, 0, 2);");
 

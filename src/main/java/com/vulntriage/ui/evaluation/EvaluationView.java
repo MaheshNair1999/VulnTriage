@@ -312,7 +312,7 @@ public class EvaluationView {
     private GridPane buildMatrixGrid(ConfusionMatrix matrix) {
         GridPane grid = new GridPane();
         grid.setHgap(3); grid.setVgap(3);
-        grid.setStyle("-fx-background-color: white; -fx-background-radius: 10; "
+        grid.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10; "
             + "-fx-padding: 20; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 8, 0, 0, 2);");
 
@@ -528,7 +528,7 @@ public class EvaluationView {
 
         GridPane grid = new GridPane();
         grid.setHgap(2); grid.setVgap(2);
-        grid.setStyle("-fx-background-color: white; -fx-background-radius: 10; "
+        grid.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10; "
             + "-fx-padding: 20; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 8, 0, 0, 2);");
 

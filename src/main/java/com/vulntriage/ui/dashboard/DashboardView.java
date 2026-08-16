@@ -206,7 +206,7 @@ public class DashboardView {
         chart.setLegendVisible(false);
         chart.setAnimated(false);
         chart.setPrefHeight(300);
-        chart.setStyle("-fx-background-color: white; -fx-background-radius: 10px; "
+        chart.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10px; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);");
 
         List<Finding> findings = scopedFindings();
@@ -252,7 +252,7 @@ public class DashboardView {
         }
 
         VBox card = new VBox(0);
-        card.setStyle("-fx-background-color: white; -fx-background-radius: 10px; "
+        card.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10px; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);");
         card.setPadding(new Insets(16));
         card.getChildren().add(chart);
@@ -261,7 +261,7 @@ public class DashboardView {
 
     private VBox wrapInCard(Node content) {
         VBox card = new VBox(0);
-        card.setStyle("-fx-background-color: white; -fx-background-radius: 10px; "
+        card.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10px; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);");
         card.setPadding(new Insets(16));
         card.getChildren().add(content);
@@ -341,8 +341,8 @@ public class DashboardView {
         HBox cards = new HBox(16);
         cards.getChildren().addAll(
             scannerCard("ERROR",   errCount,  "" + RED_EXTRA + "", "" + RED_LIGHT_BG + "", accent),
-            scannerCard("WARNING", warnCount, "" + AMBER_DIM + "", "#FFFBEB", accent),
-            scannerCard("INFO",    infoCount, "#166534", "#F0FDF4", accent),
+            scannerCard("WARNING", warnCount, "" + AMBER_DIM + "", "" + AMBER_BG + "", accent),
+            scannerCard("INFO",    infoCount, "" + GREEN_DIM + "", "" + GREEN_BG + "", accent),
             scannerCard("TOTAL",   total,     "" + BLUE_EXTRA + "", "" + BTN_BG_SECONDARY + "", accent)
         );
         cards.getChildren().forEach(n -> HBox.setHgrow(n, Priority.ALWAYS));
@@ -357,7 +357,7 @@ public class DashboardView {
     private VBox buildCategoryBar(List<Finding> findings, String accent) {
         VBox box = new VBox(10);
         box.setPadding(new Insets(16));
-        box.setStyle("-fx-background-color: white; -fx-background-radius: 10; "
+        box.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);");
 
         Label title = new Label("Top Categories");
