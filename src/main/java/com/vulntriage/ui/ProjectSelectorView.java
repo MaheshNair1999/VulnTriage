@@ -9,6 +9,8 @@ import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import com.vulntriage.app.AppContext;
+import com.vulntriage.config.ThemeColors;
 import java.io.File;
 import java.nio.file.*;
 import java.time.LocalDateTime;
@@ -64,7 +66,16 @@ public class ProjectSelectorView {
 
         root.getChildren().addAll(buildHeader(), buildContent());
 
-        return new Scene(root, 720, 540);
+        Scene scene = new Scene(root, 720, 540);
+        try {
+            boolean dark = AppContext.getInstance().isDarkMode();
+            if (dark) {
+                java.net.URL css = getClass().getResource("/dark-mode.css");
+                if (css != null) scene.getStylesheets().add(css.toExternalForm());
+                ThemeColors.apply(true);
+            }
+        } catch (Exception ignored) {}
+        return scene;
     }
 
     // ── Header ─────────────────────────────────────────────────────────────
@@ -164,7 +175,7 @@ public class ProjectSelectorView {
         Button openBtn = new Button();
         openBtn.setGraphic(graphic);
         openBtn.setMaxWidth(Double.MAX_VALUE);
-        openBtn.setStyle("-fx-background-color: white; -fx-background-radius: 9; "
+        openBtn.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 9; "
             + "-fx-border-color: " + BORDER + "; -fx-border-radius: 9; "
             + "-fx-padding: 14 18; -fx-cursor: hand; -fx-alignment: CENTER-LEFT;");
         openBtn.setOnAction(e -> onProjectSelected.accept(db.toAbsolutePath()));
@@ -173,7 +184,7 @@ public class ProjectSelectorView {
             + "-fx-border-color: " + BLUE + "; -fx-border-radius: 9; "
             + "-fx-padding: 14 18; -fx-cursor: hand; -fx-alignment: CENTER-LEFT;"));
         openBtn.setOnMouseExited(e -> openBtn.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 9; "
+            "-fx-background-color: " + CARD + "; -fx-background-radius: 9; "
             + "-fx-border-color: " + BORDER + "; -fx-border-radius: 9; "
             + "-fx-padding: 14 18; -fx-cursor: hand; -fx-alignment: CENTER-LEFT;"));
         HBox.setHgrow(openBtn, Priority.ALWAYS);
@@ -306,9 +317,9 @@ public class ProjectSelectorView {
                 + "-fx-font-size: 12px; -fx-font-weight: bold; -fx-background-radius: 7; "
                 + "-fx-padding: 8 18; -fx-cursor: hand;");
         } else {
-            b.setStyle("-fx-background-color: white; -fx-text-fill: " + TEXT + "; "
+            b.setStyle("-fx-background-color: " + CARD + "; -fx-text-fill: " + TEXT + "; "
                 + "-fx-font-size: 12px; -fx-background-radius: 7; "
-                + "-fx-border-color: #D1D5DB; -fx-border-radius: 7; "
+                + "-fx-border-color: " + BORDER + "; -fx-border-radius: 7; "
                 + "-fx-padding: 8 18; -fx-cursor: hand;");
         }
     }
