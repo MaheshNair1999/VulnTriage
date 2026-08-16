@@ -61,8 +61,21 @@ public class MainWindow {
         stage.setMaximized(true);
         stage.show();
 
-        // Rebuild all UI when dark mode toggles
+        // Load the dark mode CSS resource URL once
+        java.net.URL cssUrl = getClass().getResource("/dark-mode.css");
+        String darkCss = cssUrl != null ? cssUrl.toExternalForm() : null;
+
+        // Apply on initial load if dark mode is already enabled
+        if (darkCss != null && AppContext.getInstance().isDarkMode()) {
+            scene.getStylesheets().add(darkCss);
+        }
+
+        // Toggle CSS + rebuild views on dark mode change
         AppContext.getInstance().darkModeProperty().addListener((obs, wasOn, isOn) -> {
+            if (darkCss != null) {
+                if (isOn)  scene.getStylesheets().add(darkCss);
+                else       scene.getStylesheets().remove(darkCss);
+            }
             viewCache.clear();
             triageViewNode = null;
             navButtons.clear();
