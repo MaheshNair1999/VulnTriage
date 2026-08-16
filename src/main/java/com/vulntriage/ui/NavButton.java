@@ -1,10 +1,12 @@
 package com.vulntriage.ui;
 
+import com.vulntriage.config.ThemeColors;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Sidebar navigation button with hover and active states.
@@ -12,8 +14,6 @@ import javafx.scene.layout.HBox;
 public class NavButton extends HBox {
 
     private static final String NORMAL = "-fx-background-color: transparent; -fx-background-radius: 6px;";
-    private static final String HOVER  = "-fx-background-color: #1F2937;     -fx-background-radius: 6px;";
-    private static final String ACTIVE = "-fx-background-color: #1D4ED8;     -fx-background-radius: 6px;";
 
     private final String    label;
     private final Label     iconLabel;
@@ -30,7 +30,7 @@ public class NavButton extends HBox {
         setCursor(Cursor.HAND);
 
         iconLabel = new Label(icon);
-        iconLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #6B7280;");
+        iconLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: " + ThemeColors.MUTED + ";");
         iconLabel.setMinWidth(18);
 
         textLabel = new Label(label);
@@ -38,7 +38,7 @@ public class NavButton extends HBox {
 
         getChildren().addAll(iconLabel, textLabel);
 
-        setOnMouseEntered(e -> { if (!active) setStyle(HOVER); });
+        setOnMouseEntered(e -> { if (!active) setStyle("-fx-background-color: " + ThemeColors.SIDEBAR_HOVER + "; -fx-background-radius: 6px;"); });
         setOnMouseExited (e -> { if (!active) setStyle(NORMAL); });
         setOnMouseClicked(e -> onAction.run());
     }
@@ -47,7 +47,7 @@ public class NavButton extends HBox {
 
     public void setActive() {
         active = true;
-        setStyle(ACTIVE);
+        setStyle("-fx-background-color: " + ThemeColors.BLUE + "; -fx-background-radius: 6px;");
         iconLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: white;");
         textLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: white; -fx-font-weight: bold;");
     }
@@ -55,7 +55,7 @@ public class NavButton extends HBox {
     public void setInactive() {
         active = false;
         setStyle(NORMAL);
-        iconLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #6B7280;");
+        iconLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: " + ThemeColors.MUTED + ";");
         textLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #9CA3AF;");
     }
 }

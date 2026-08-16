@@ -21,6 +21,7 @@ public class AppConfig {
     public static final String OLLAMA_URL    = "ollama.url";
     public static final String OLLAMA_MODEL  = "ollama.model";
     public static final String TRIAGE_DELAY  = "triage.delay_ms";
+    public static final String DARK_MODE     = "app.dark_mode";
 
     private static final String DEFAULT_OLLAMA_URL   = "http://localhost:11434";
     private static final String DEFAULT_OLLAMA_MODEL = "qwen2.5:3b";
@@ -79,5 +80,13 @@ public class AppConfig {
     public void saveTriageDelay(int delayMs) {
         set(TRIAGE_DELAY, String.valueOf(delayMs));
         log.info("Saved triage delay: {}ms", delayMs);
+    }
+
+    public boolean isDarkMode() {
+        return "true".equals(get(DARK_MODE, "false"));
+    }
+
+    public void saveDarkMode(boolean dark) {
+        set(DARK_MODE, String.valueOf(dark));
     }
 }

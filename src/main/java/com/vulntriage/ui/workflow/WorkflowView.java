@@ -30,6 +30,7 @@ import javafx.scene.shape.Rectangle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Workflow Designer screen — create, edit, save and run security workflows.
@@ -47,13 +48,6 @@ import java.util.Optional;
  */
 public class WorkflowView {
 
-    private static final String BG    = "#F1F5F9";
-    private static final String CARD  = "#FFFFFF";
-    private static final String TEXT  = "#111827";
-    private static final String MUTED = "#6B7280";
-    private static final String BLUE  = "#1D4ED8";
-    private static final String GREEN = "#059669";
-    private static final String RED   = "#DC2626";
 
     private final AppContext    ctx    = AppContext.getInstance();
     private final WorkflowParser parser = new WorkflowParser();
@@ -102,7 +96,7 @@ public class WorkflowView {
         header.setPadding(new Insets(18, 28, 14, 28));
         header.setAlignment(Pos.CENTER_LEFT);
         header.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 1 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
         VBox titleBlock = new VBox(2);
         Label title = new Label("Workflow Designer");
@@ -165,13 +159,13 @@ public class WorkflowView {
         record StepDef(StepType type, String label, String color) {}
 
         List<StepDef> defs = List.of(
-            new StepDef(StepType.SCAN,   "⊕ Scan",   "#1D4ED8"),
-            new StepDef(StepType.SELECT, "⊚ Select", "#0891B2"),
-            new StepDef(StepType.FILTER, "⊘ Filter", "#7C3AED"),
+            new StepDef(StepType.SCAN,   "⊕ Scan",   " + BLUE + "),
+            new StepDef(StepType.SELECT, "⊚ Select", " + TEAL + "),
+            new StepDef(StepType.FILTER, "⊘ Filter", " + PURPLE + "),
             new StepDef(StepType.SAMPLE, "⊙ Sample", "#64748B"),
-            new StepDef(StepType.TRIAGE, "◉ Triage", "#D97706"),
-            new StepDef(StepType.SCORE,  "★ Score",  "#059669"),
-            new StepDef(StepType.REPORT, "≡ Report", "#DC2626")
+            new StepDef(StepType.TRIAGE, "◉ Triage", " + AMBER + "),
+            new StepDef(StepType.SCORE,  "★ Score",  " + GREEN + "),
+            new StepDef(StepType.REPORT, "≡ Report", " + RED + ")
         );
 
         for (StepDef def : defs) {
@@ -217,9 +211,9 @@ public class WorkflowView {
     }
 
     private HBox buildStepCard(StepRow row, int index) {
-        final String styleNormal   = "-fx-background-color: #F8FAFC; -fx-background-radius: 6; "
-            + "-fx-border-color: #E5E7EB; -fx-border-radius: 6;";
-        final String styleDragOver = "-fx-background-color: #EFF6FF; -fx-background-radius: 6; "
+        final String styleNormal   = "-fx-background-color: " + SURFACE2 + "; -fx-background-radius: 6; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6;";
+        final String styleDragOver = "-fx-background-color: " + BTN_BG_SECONDARY + "; -fx-background-radius: 6; "
             + "-fx-border-color: " + BLUE + "; -fx-border-radius: 6; -fx-border-width: 2;";
 
         HBox card = new HBox(10);
@@ -319,9 +313,9 @@ public class WorkflowView {
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 7 16; "
             + "-fx-font-weight: bold;");
         stopWorkflowBtn = new Button("■  Stop Workflow");
-        stopWorkflowBtn.setStyle("-fx-background-color: #FEF2F2; -fx-text-fill: " + RED + "; "
+        stopWorkflowBtn.setStyle("-fx-background-color: " + RED_LIGHT_BG + "; -fx-text-fill: " + RED + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 7 16; "
-            + "-fx-border-color: #FECACA; -fx-border-radius: 6;");
+            + "-fx-border-color: " + RED_BORDER + "; -fx-border-radius: 6;");
         stopWorkflowBtn.setVisible(false);
         stopWorkflowBtn.setManaged(false);
         Button clearBtn = secondaryBtn("⊘  Clear");
@@ -346,7 +340,7 @@ public class WorkflowView {
         VBox panel = new VBox(12);
         panel.setPadding(new Insets(20, 24, 20, 16));
         panel.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 0 1;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 0 0 1;");
 
         Label heading = new Label("Saved Workflows");
         heading.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
@@ -366,9 +360,9 @@ public class WorkflowView {
         HBox listActions = new HBox(8);
         Button loadBtn   = secondaryBtn("Load");
         Button deleteBtn = new Button("Delete");
-        deleteBtn.setStyle("-fx-background-color: #FEF2F2; -fx-text-fill: " + RED + "; "
+        deleteBtn.setStyle("-fx-background-color: " + RED_LIGHT_BG + "; -fx-text-fill: " + RED + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 6 12; "
-            + "-fx-border-color: #FECACA; -fx-border-radius: 6;");
+            + "-fx-border-color: " + RED_BORDER + "; -fx-border-radius: 6;");
 
         loadBtn.setOnAction(e -> loadSelected());
         deleteBtn.setOnAction(e -> deleteSelected());
@@ -377,7 +371,7 @@ public class WorkflowView {
         // JSON preview
         Label previewLabel = sectionHeading("JSON Preview");
         Label expandHint = new Label("double-click to expand");
-        expandHint.setStyle("-fx-font-size: 10px; -fx-text-fill: #6B7280; -fx-font-style: italic;");
+        expandHint.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
         HBox previewHeader = new HBox(8, previewLabel, expandHint);
         previewHeader.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
 
@@ -594,7 +588,7 @@ public class WorkflowView {
         Label note = new Label(
             "SELECT loads existing findings from the database matching these criteria "
             + "and passes them directly to TRIAGE — no scan needed.");
-        note.setStyle("-fx-font-size: 10px; -fx-text-fill: #6B7280; -fx-font-style: italic;");
+        note.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
         note.setWrapText(true);
         GridPane.setColumnSpan(note, 2);
         grid.add(note, 0, r);
@@ -912,7 +906,7 @@ public class WorkflowView {
     }
 
     private void styleField(TextField f) {
-        f.setStyle("-fx-font-size: 12px; -fx-border-color: #E5E7EB; "
+        f.setStyle("-fx-font-size: 12px; -fx-border-color: " + BORDER + "; "
             + "-fx-border-radius: 5; -fx-background-radius: 5; -fx-padding: 5 8;");
     }
 
@@ -924,7 +918,7 @@ public class WorkflowView {
 
     private Label boldLabel(String text) {
         Label l = new Label(text);
-        l.setStyle("-fx-font-weight: bold; -fx-text-fill: #374151; -fx-font-size: 11px;");
+        l.setStyle("-fx-font-weight: bold; -fx-text-fill: " + DIM + "; -fx-font-size: 11px;");
         return l;
     }
 
@@ -944,9 +938,9 @@ public class WorkflowView {
 
     private Button secondaryBtn(String text) {
         Button b = new Button(text);
-        b.setStyle("-fx-background-color: #EFF6FF; -fx-text-fill: " + BLUE + "; "
+        b.setStyle("-fx-background-color: " + BTN_BG_SECONDARY + "; -fx-text-fill: " + BLUE + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 7 14; "
-            + "-fx-border-color: #BFDBFE; -fx-border-radius: 6;");
+            + "-fx-border-color: " + BTN_BORDER_SECONDARY + "; -fx-border-radius: 6;");
         return b;
     }
 

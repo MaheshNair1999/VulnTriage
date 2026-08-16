@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Targeted Triage screen.
@@ -44,15 +45,6 @@ public class TargetedTriageView {
     private static final DateTimeFormatter DATE_FMT =
         DateTimeFormatter.ofPattern("dd MMM HH:mm");
 
-    private static final String BG    = "#F1F5F9";
-    private static final String CARD  = "#FFFFFF";
-    private static final String TEXT  = "#111827";
-    private static final String MUTED = "#6B7280";
-    private static final String BLUE  = "#1D4ED8";
-    private static final String TEAL  = "#0891B2";
-    private static final String GREEN = "#059669";
-    private static final String RED   = "#DC2626";
-    private static final String AMBER = "#D97706";
 
     private final AppContext ctx = AppContext.getInstance();
 
@@ -111,7 +103,7 @@ public class TargetedTriageView {
         header.setPadding(new Insets(18, 28, 14, 28));
         header.setAlignment(Pos.CENTER_LEFT);
         header.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 1 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
         VBox titleBlock = new VBox(2);
         Label title = new Label("Triage");
@@ -145,7 +137,7 @@ public class TargetedTriageView {
         panel.setMinWidth(260);
         panel.setPadding(new Insets(24, 20, 24, 28));
         panel.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 1 0 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 1 0 0;");
 
         // ── Ollama connection ──────────────────────────────────────────────
         Label connHeading = sectionHeading("Ollama Connection");
@@ -236,9 +228,9 @@ public class TargetedTriageView {
         stopBtn.setMaxWidth(Double.MAX_VALUE);
         stopBtn.setPrefHeight(44);
         stopBtn.setDisable(true);
-        stopBtn.setStyle("-fx-background-color: #FEF2F2; -fx-text-fill: " + RED + "; "
+        stopBtn.setStyle("-fx-background-color: " + RED_LIGHT_BG + "; -fx-text-fill: " + RED + "; "
             + "-fx-background-radius: 6; -fx-font-size: 13px; -fx-font-weight: bold; "
-            + "-fx-border-color: #FECACA; -fx-border-radius: 6;");
+            + "-fx-border-color: " + RED_BORDER + "; -fx-border-radius: 6;");
         stopBtn.setOnAction(e -> stopTriage());
 
         HBox btnRow = new HBox(8, runBtn, stopBtn);
@@ -285,7 +277,7 @@ public class TargetedTriageView {
         scroll.setPrefWidth(300);
         scroll.setMinWidth(260);
         scroll.setStyle("-fx-background-color: " + CARD
-            + "; -fx-background: " + CARD + "; -fx-border-color: #E5E7EB; -fx-border-width: 0 1 0 0;");
+            + "; -fx-background: " + CARD + "; -fx-border-color: " + BORDER + "; -fx-border-width: 0 1 0 0;");
 
         // Wrap in a VBox to preserve VGrow
         VBox wrapper = new VBox(scroll);
@@ -330,7 +322,7 @@ public class TargetedTriageView {
 
         previewSelLabel = new Label();
         previewSelLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; "
-            + "-fx-text-fill: " + TEAL + "; -fx-background-color: #ECFEFF; "
+            + "-fx-text-fill: " + TEAL + "; -fx-background-color: " + TEAL_BG + "; "
             + "-fx-background-radius: 5; -fx-padding: 4 10;");
         previewSelLabel.setVisible(false);
         previewSelLabel.setManaged(false);
@@ -411,7 +403,7 @@ public class TargetedTriageView {
         HBox.setHgrow(headSpacer, Priority.ALWAYS);
         Label resultSelLabel = new Label();
         resultSelLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; "
-            + "-fx-text-fill: " + TEAL + "; -fx-background-color: #ECFEFF; "
+            + "-fx-text-fill: " + TEAL + "; -fx-background-color: " + TEAL_BG + "; "
             + "-fx-background-radius: 5; -fx-padding: 4 10;");
         resultSelLabel.setVisible(false);
         resultSelLabel.setManaged(false);
@@ -1110,8 +1102,8 @@ public class TargetedTriageView {
         val.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
         VBox chip = new VBox(1, lbl, val);
         chip.setPadding(new Insets(6, 10, 6, 10));
-        chip.setStyle("-fx-background-color: #F8FAFC; -fx-background-radius: 6; "
-            + "-fx-border-color: #E5E7EB; -fx-border-radius: 6;");
+        chip.setStyle("-fx-background-color: " + SURFACE2 + "; -fx-background-radius: 6; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6;");
         return chip;
     }
 
@@ -1168,14 +1160,14 @@ public class TargetedTriageView {
 
     private Button secondaryBtn(String text) {
         Button b = new Button(text);
-        b.setStyle("-fx-background-color: #EFF6FF; -fx-text-fill: " + BLUE + "; "
+        b.setStyle("-fx-background-color: " + BTN_BG_SECONDARY + "; -fx-text-fill: " + BLUE + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 7 14; "
-            + "-fx-border-color: #BFDBFE; -fx-border-radius: 6;");
+            + "-fx-border-color: " + BTN_BORDER_SECONDARY + "; -fx-border-radius: 6;");
         return b;
     }
 
     private void styleField(TextField f) {
-        f.setStyle("-fx-font-size: 12px; -fx-border-color: #E5E7EB; "
+        f.setStyle("-fx-font-size: 12px; -fx-border-color: " + BORDER + "; "
             + "-fx-border-radius: 5; -fx-background-radius: 5; -fx-padding: 5 8;");
     }
 
@@ -1187,7 +1179,7 @@ public class TargetedTriageView {
 
     private Label fieldLabel(String text) {
         Label l = new Label(text);
-        l.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #374151;");
+        l.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: " + DIM + ";");
         return l;
     }
 

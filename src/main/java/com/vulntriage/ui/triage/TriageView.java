@@ -21,6 +21,7 @@ import javafx.scene.layout.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Triage Results screen — read-only view of all LLM triage results in the DB.
@@ -31,14 +32,6 @@ public class TriageView {
     private static final java.time.format.DateTimeFormatter DATE_FMT =
         java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm");
 
-    private static final String BG    = "#F1F5F9";
-    private static final String CARD  = "#FFFFFF";
-    private static final String TEXT  = "#111827";
-    private static final String MUTED = "#6B7280";
-    private static final String BLUE  = "#1D4ED8";
-    private static final String GREEN = "#059669";
-    private static final String RED   = "#DC2626";
-    private static final String AMBER = "#D97706";
 
     private final AppContext ctx = AppContext.getInstance();
 
@@ -79,7 +72,7 @@ public class TriageView {
         header.setPadding(new Insets(18, 28, 14, 28));
         header.setAlignment(Pos.CENTER_LEFT);
         header.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 1 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
         VBox titleBlock = new VBox(2);
         Label title = new Label("Triage Results");
@@ -136,7 +129,7 @@ public class TriageView {
 
         Label selectionLabel = new Label();
         selectionLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; "
-            + "-fx-text-fill: " + BLUE + "; -fx-background-color: #EFF6FF; "
+            + "-fx-text-fill: " + BLUE + "; -fx-background-color: " + BTN_BG_SECONDARY + "; "
             + "-fx-background-radius: 5; -fx-padding: 4 10;");
         selectionLabel.setVisible(false);
         selectionLabel.setManaged(false);
@@ -427,7 +420,7 @@ public class TriageView {
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private void styleField(TextField f) {
-        f.setStyle("-fx-font-size: 12px; -fx-border-color: #E5E7EB; "
+        f.setStyle("-fx-font-size: 12px; -fx-border-color: " + BORDER + "; "
             + "-fx-border-radius: 5; -fx-background-radius: 5; -fx-padding: 5 8;");
     }
 
@@ -439,15 +432,15 @@ public class TriageView {
 
     private Label fieldLabel(String text) {
         Label l = new Label(text);
-        l.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #374151;");
+        l.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: " + DIM + ";");
         return l;
     }
 
     private Button secondaryBtn(String text) {
         Button b = new Button(text);
-        b.setStyle("-fx-background-color: #EFF6FF; -fx-text-fill: " + BLUE + "; "
+        b.setStyle("-fx-background-color: " + BTN_BG_SECONDARY + "; -fx-text-fill: " + BLUE + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 7 14; "
-            + "-fx-border-color: #BFDBFE; -fx-border-radius: 6;");
+            + "-fx-border-color: " + BTN_BORDER_SECONDARY + "; -fx-border-radius: 6;");
         return b;
     }
 

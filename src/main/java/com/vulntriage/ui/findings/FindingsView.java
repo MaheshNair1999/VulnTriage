@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Findings Browser screen.
@@ -35,11 +36,6 @@ public class FindingsView {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM HH:mm");
 
-    private static final String BG      = "#F1F5F9";
-    private static final String CARD_BG = "#FFFFFF";
-    private static final String TEXT    = "#111827";
-    private static final String MUTED   = "#6B7280";
-    private static final String ACCENT  = "#1D4ED8";
 
     // Sentinel value for "All Repositories" option
     private static final long ALL_REPOS = -1L;
@@ -79,7 +75,7 @@ public class FindingsView {
         bar.setPadding(new Insets(18, 28, 14, 28));
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setStyle("-fx-background-color: " + CARD_BG + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 1 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
         VBox titleBlock = new VBox(2);
         Label title = new Label("Findings");
@@ -115,7 +111,7 @@ public class FindingsView {
         search.setPromptText("Search rule, file, category…");
         search.setPrefWidth(220);
         search.setStyle("-fx-font-size: 12px; -fx-background-radius: 6px; "
-            + "-fx-border-radius: 6px; -fx-border-color: #E5E7EB; -fx-padding: 6 10;");
+            + "-fx-border-radius: 6px; -fx-border-color: " + BORDER + "; -fx-padding: 6 10;");
 
         // Wire all filters together
         Runnable applyFilter = () -> {
@@ -145,22 +141,22 @@ public class FindingsView {
         search.textProperty().addListener((o, old, n) -> applyFilter.run());
 
         refreshBtn = new Button("↻  Refresh");
-        refreshBtn.setStyle("-fx-background-color: #F9FAFB; -fx-text-fill: #374151; "
+        refreshBtn.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + DIM + "; "
             + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 6 14; "
-            + "-fx-border-color: #E5E7EB; -fx-border-radius: 6px;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6px;");
         refreshBtn.setOnAction(e -> doRefresh(applyFilter));
 
         selectionLabel = new Label();
         selectionLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; "
-            + "-fx-text-fill: #1D4ED8; -fx-background-color: #EFF6FF; "
+            + "-fx-text-fill: #1D4ED8; -fx-background-color: " + BTN_BG_SECONDARY + "; "
             + "-fx-background-radius: 5; -fx-padding: 4 10;");
         selectionLabel.setVisible(false);
         selectionLabel.setManaged(false);
 
         deleteBtn = new Button("🗑  Delete");
-        deleteBtn.setStyle("-fx-background-color: #FEF2F2; -fx-text-fill: #DC2626; "
+        deleteBtn.setStyle("-fx-background-color: " + RED_LIGHT_BG + "; -fx-text-fill: #DC2626; "
             + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 6 14; "
-            + "-fx-border-color: #FECACA; -fx-border-radius: 6px;");
+            + "-fx-border-color: " + RED_BORDER + "; -fx-border-radius: 6px;");
         deleteBtn.setVisible(false);
         deleteBtn.setManaged(false);
         deleteBtn.setOnAction(e -> deleteSelected());
@@ -195,9 +191,9 @@ public class FindingsView {
     private void doRefresh(Runnable applyFilter) {
         refreshBtn.setDisable(true);
         refreshBtn.setText("↻  Loading…");
-        refreshBtn.setStyle("-fx-background-color: #EFF6FF; -fx-text-fill: " + ACCENT + "; "
+        refreshBtn.setStyle("-fx-background-color: " + BTN_BG_SECONDARY + "; -fx-text-fill: " + ACCENT + "; "
             + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 6 14; "
-            + "-fx-border-color: #BFDBFE; -fx-border-radius: 6px;");
+            + "-fx-border-color: " + BTN_BORDER_SECONDARY + "; -fx-border-radius: 6px;");
 
         javafx.animation.Timeline spinner = new javafx.animation.Timeline(
             new javafx.animation.KeyFrame(javafx.util.Duration.millis(200), ev -> {
@@ -224,9 +220,9 @@ public class FindingsView {
         task.setOnSucceeded(e -> {
             spinner.stop();
             refreshBtn.setText("↻  Refresh");
-            refreshBtn.setStyle("-fx-background-color: #F9FAFB; -fx-text-fill: #374151; "
+            refreshBtn.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + DIM + "; "
                 + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 6 14; "
-                + "-fx-border-color: #E5E7EB; -fx-border-radius: 6px;");
+                + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6px;");
             refreshBtn.setDisable(false);
             updateStatus();
         });
@@ -234,9 +230,9 @@ public class FindingsView {
         task.setOnFailed(e -> {
             spinner.stop();
             refreshBtn.setText("↻  Refresh");
-            refreshBtn.setStyle("-fx-background-color: #FEF2F2; -fx-text-fill: #DC2626; "
+            refreshBtn.setStyle("-fx-background-color: " + RED_LIGHT_BG + "; -fx-text-fill: #DC2626; "
                 + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 6 14; "
-                + "-fx-border-color: #FECACA; -fx-border-radius: 6px;");
+                + "-fx-border-color: " + RED_BORDER + "; -fx-border-radius: 6px;");
             refreshBtn.setDisable(false);
         });
 
@@ -292,11 +288,11 @@ public class FindingsView {
                 if (empty || item == null) { setText(null); setStyle(""); return; }
                 setText(item);
                 String color = switch (item) {
-                    case "TRIVY"     -> "#D97706";
-                    case "GITLEAKS"  -> "#B45309";
-                    case "CODEQL"    -> "#059669";
-                    case "SONARQUBE" -> "#DC2626";
-                    default          -> "#1D4ED8"; // SEMGREP
+                    case "TRIVY"     -> " + AMBER + ";
+                    case "GITLEAKS"  -> "" + AMBER_EXTRA + "";
+                    case "CODEQL"    -> " + GREEN + ";
+                    case "SONARQUBE" -> " + RED + ";
+                    default          -> " + BLUE + "; // SEMGREP
                 };
                 setStyle("-fx-text-fill: " + color + "; -fx-font-weight: bold; -fx-font-size: 10px;");
             }
@@ -374,13 +370,13 @@ public class FindingsView {
         badges.getChildren().addAll(
             makeBadge(row.getSeverity(), badgeColor(row.getSeverity()), badgeText(row.getSeverity())),
             makeBadge(row.getSource(),   scannerBg(row.getSource()),    scannerFg(row.getSource())),
-            makeBadge(row.getRepoName(), "#F3F4F6", "#374151")
+            makeBadge(row.getRepoName(), "" + NEUTRAL_BG + "", "" + DIM + "")
         );
         if (row.getCvssScore() != null) {
             double s = row.getCvssScore();
             String cvssLabel = "CVSS " + String.format("%.1f", s);
-            String cvssBg = s >= 9.0 ? "#FEE2E2" : s >= 7.0 ? "#FEF3C7" : s >= 4.0 ? "#EFF6FF" : "#F3F4F6";
-            String cvssFg = s >= 9.0 ? "#991B1B" : s >= 7.0 ? "#92400E" : s >= 4.0 ? "#1E40AF" : "#374151";
+            String cvssBg = s >= 9.0 ? "" + RED_BG + "" : s >= 7.0 ? "" + AMBER_BG + "" : s >= 4.0 ? "" + BTN_BG_SECONDARY + "" : "" + NEUTRAL_BG + "";
+            String cvssFg = s >= 9.0 ? "" + RED_DIM + "" : s >= 7.0 ? "" + AMBER_DIM + "" : s >= 4.0 ? "" + BTN_FG_SECONDARY + "" : "" + DIM + "";
             badges.getChildren().add(makeBadge(cvssLabel, cvssBg, cvssFg));
         }
 
@@ -402,7 +398,7 @@ public class FindingsView {
         // Code snippet
         Label codeHead = sectionHead("Code Snippet");
         Label expandHint = new Label("⤢ double-click to expand");
-        expandHint.setStyle("-fx-font-size: 10px; -fx-text-fill: #6B7280; -fx-font-style: italic;");
+        expandHint.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
         HBox codeHeader = new HBox(8, codeHead, expandHint);
         codeHeader.setAlignment(Pos.CENTER_LEFT);
         TextArea codeArea = new TextArea(
@@ -494,21 +490,21 @@ public class FindingsView {
 
     private String scannerBg(String source) {
         return switch (source) {
-            case "TRIVY"     -> "#FEF3C7";
-            case "GITLEAKS"  -> "#FEF3C7";
-            case "CODEQL"    -> "#D1FAE5";
-            case "SONARQUBE" -> "#FEE2E2";
-            default          -> "#DBEAFE"; // SEMGREP
+            case "TRIVY"     -> "" + AMBER_BG + "";
+            case "GITLEAKS"  -> "" + AMBER_BG + "";
+            case "CODEQL"    -> "" + GREEN_BG + "";
+            case "SONARQUBE" -> "" + RED_BG + "";
+            default          -> "" + BLUE_BG + ""; // SEMGREP
         };
     }
 
     private String scannerFg(String source) {
         return switch (source) {
-            case "TRIVY"     -> "#92400E";
-            case "GITLEAKS"  -> "#B45309";
-            case "CODEQL"    -> "#065F46";
-            case "SONARQUBE" -> "#991B1B";
-            default          -> "#1E40AF"; // SEMGREP
+            case "TRIVY"     -> "" + AMBER_DIM + "";
+            case "GITLEAKS"  -> "" + AMBER_EXTRA + "";
+            case "CODEQL"    -> "" + GREEN_DIM + "";
+            case "SONARQUBE" -> "" + RED_DIM + "";
+            default          -> "" + BTN_FG_SECONDARY + ""; // SEMGREP
         };
     }
 
@@ -518,7 +514,7 @@ public class FindingsView {
         HBox bar = new HBox();
         bar.setPadding(new Insets(6, 28, 8, 28));
         bar.setStyle("-fx-background-color: " + CARD_BG + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 1 0 0 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 1 0 0 0;");
         statusLabel = new Label();
         statusLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
         bar.getChildren().add(statusLabel);
@@ -623,17 +619,17 @@ public class FindingsView {
 
     private String badgeColor(String severity) {
         return switch (severity) {
-            case "ERROR"   -> "#FEE2E2";
-            case "WARNING" -> "#FEF3C7";
-            default        -> "#EFF6FF";
+            case "ERROR"   -> "" + RED_BG + "";
+            case "WARNING" -> "" + AMBER_BG + "";
+            default        -> "" + BTN_BG_SECONDARY + "";
         };
     }
 
     private String badgeText(String severity) {
         return switch (severity) {
-            case "ERROR"   -> "#991B1B";
-            case "WARNING" -> "#92400E";
-            default        -> "#1E40AF";
+            case "ERROR"   -> "" + RED_DIM + "";
+            case "WARNING" -> "" + AMBER_DIM + "";
+            default        -> "" + BTN_FG_SECONDARY + "";
         };
     }
 

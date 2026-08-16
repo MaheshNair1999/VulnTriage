@@ -20,6 +20,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Manual Review screen — the core thesis data collection tool.
@@ -41,15 +42,7 @@ import java.util.Optional;
 public class ReviewView {
 
     // ── Palette ────────────────────────────────────────────────────────────
-    private static final String BG       = "#F1F5F9";
-    private static final String CARD     = "#FFFFFF";
-    private static final String TEXT     = "#111827";
-    private static final String MUTED    = "#6B7280";
     private static final String MONO     = "Courier New";
-    private static final String GREEN    = "#059669";
-    private static final String RED      = "#DC2626";
-    private static final String AMBER    = "#D97706";
-    private static final String BLUE     = "#1D4ED8";
 
     private final AppContext ctx = AppContext.getInstance();
 
@@ -126,7 +119,7 @@ public class ReviewView {
         header.setPadding(new Insets(18, 28, 14, 28));
         header.setAlignment(Pos.CENTER_LEFT);
         header.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 1 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
         VBox titleBlock = new VBox(2);
         Label title = new Label("Manual Review");
@@ -186,7 +179,7 @@ public class ReviewView {
         categoryLabel  = new Label("xss");
         categoryLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: " + MUTED + ";");
         scannerBadge   = new Label("SEMGREP");
-        scannerBadge.setStyle("-fx-background-color: #EDE9FE; -fx-text-fill: #6D28D9; "
+        scannerBadge.setStyle("-fx-background-color: " + PURPLE_BG + "; -fx-text-fill: " + PURPLE_DIM + "; "
             + "-fx-background-radius: 10; -fx-padding: 2 8 2 8; "
             + "-fx-font-size: 10px; -fx-font-weight: bold;");
         meta.getChildren().addAll(severityBadge, categoryLabel, scannerBadge);
@@ -218,7 +211,7 @@ public class ReviewView {
         // Code snippet
         Label codeHeading = sectionHeading("Code Snippet");
         Label expandHint = new Label("⤢ double-click to view full file");
-        expandHint.setStyle("-fx-font-size: 10px; -fx-text-fill: #6B7280; -fx-font-style: italic;");
+        expandHint.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
         HBox codeHeader = new HBox(8, codeHeading, expandHint);
         codeHeader.setAlignment(Pos.CENTER_LEFT);
         codeArea = new TextArea();
@@ -241,7 +234,7 @@ public class ReviewView {
         notesField.setPromptText("Add notes about this finding… (press Escape when done)");
         notesField.setPrefRowCount(3);
         notesField.setStyle(
-            "-fx-font-size: 12px; -fx-border-color: #E5E7EB; "
+            "-fx-font-size: 12px; -fx-border-color: " + BORDER + "; "
             + "-fx-border-radius: 6px; -fx-background-radius: 6px;");
 
         panel.getChildren().addAll(
@@ -258,7 +251,7 @@ public class ReviewView {
         panel.setPadding(new Insets(24, 24, 24, 20));
         panel.setAlignment(Pos.TOP_CENTER);
         panel.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 0 1;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 0 0 1;");
 
         Label heading = new Label("Assign Verdict");
         heading.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
@@ -268,7 +261,7 @@ public class ReviewView {
         currentVerdictLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
 
         Label divider = new Label("─────────────────");
-        divider.setStyle("-fx-text-fill: #E5E7EB;");
+        divider.setStyle("-fx-text-fill: " + BORDER + ";");
 
         // Verdict buttons
         tpBtn  = verdictBtn("[T]  True Positive",  GREEN, "Genuine exploitable vulnerability");
@@ -291,7 +284,7 @@ public class ReviewView {
         javafx.scene.control.TextField jumpField = new javafx.scene.control.TextField();
         jumpField.setPromptText("# go to");
         jumpField.setPrefWidth(80);
-        jumpField.setStyle("-fx-font-size: 12px; -fx-border-color: #E5E7EB; "
+        jumpField.setStyle("-fx-font-size: 12px; -fx-border-color: " + BORDER + "; "
             + "-fx-border-radius: 5; -fx-background-radius: 5; -fx-padding: 5 8;");
         jumpField.setOnAction(e -> {
             try {
@@ -311,7 +304,7 @@ public class ReviewView {
         });
         // Reset border on typing
         jumpField.textProperty().addListener((o, old, n) ->
-            jumpField.setStyle("-fx-font-size: 12px; -fx-border-color: #E5E7EB; "
+            jumpField.setStyle("-fx-font-size: 12px; -fx-border-color: " + BORDER + "; "
                 + "-fx-border-radius: 5; -fx-background-radius: 5; -fx-padding: 5 8;"));
 
         navRow.getChildren().addAll(prevBtn, nextBtn, jumpField);
@@ -374,12 +367,12 @@ public class ReviewView {
         if (f.getSource() != null) {
             String sname = f.getSource().name();
             String[] scannerColors = switch (sname) {
-                case "SEMGREP"   -> new String[]{"#EDE9FE", "#6D28D9"};
-                case "TRIVY"     -> new String[]{"#DBEAFE", "#1D4ED8"};
-                case "GITLEAKS"  -> new String[]{"#FEF3C7", "#92400E"};
-                case "CODEQL"    -> new String[]{"#D1FAE5", "#065F46"};
-                case "SONARQUBE" -> new String[]{"#FEE2E2", "#991B1B"};
-                default          -> new String[]{"#F3F4F6", "#374151"};
+                case "SEMGREP"   -> new String[]{"" + PURPLE_BG + "", "" + PURPLE_DIM + ""};
+                case "TRIVY"     -> new String[]{"" + BLUE_BG + "", " + BLUE + "};
+                case "GITLEAKS"  -> new String[]{"" + AMBER_BG + "", "" + AMBER_DIM + ""};
+                case "CODEQL"    -> new String[]{"" + GREEN_BG + "", "" + GREEN_DIM + ""};
+                case "SONARQUBE" -> new String[]{"" + RED_BG + "", "" + RED_DIM + ""};
+                default          -> new String[]{"" + NEUTRAL_BG + "", "" + DIM + ""};
             };
             scannerBadge.setText(sname);
             scannerBadge.setStyle("-fx-background-color: " + scannerColors[0] + "; "
@@ -477,9 +470,9 @@ public class ReviewView {
     private void applySeverityStyle(String severity) {
         String bg, fg;
         switch (severity) {
-            case "ERROR"   -> { bg = "#FEE2E2"; fg = "#991B1B"; }
-            case "WARNING" -> { bg = "#FEF3C7"; fg = "#92400E"; }
-            default        -> { bg = "#EFF6FF"; fg = "#1E40AF"; }
+            case "ERROR"   -> { bg = "" + RED_BG + ""; fg = "" + RED_DIM + ""; }
+            case "WARNING" -> { bg = "" + AMBER_BG + ""; fg = "" + AMBER_DIM + ""; }
+            default        -> { bg = "" + BTN_BG_SECONDARY + ""; fg = "" + BTN_FG_SECONDARY + ""; }
         }
         severityBadge.setText(severity);
         severityBadge.setStyle(
@@ -527,9 +520,9 @@ public class ReviewView {
 
     private Button navBtn(String text) {
         Button b = new Button(text);
-        b.setStyle("-fx-background-color: #F9FAFB; -fx-text-fill: #374151; "
+        b.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + DIM + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 6 16; "
-            + "-fx-border-color: #E5E7EB; -fx-border-radius: 6;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6;");
         b.setFocusTraversable(false);
         return b;
     }

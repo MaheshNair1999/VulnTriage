@@ -9,19 +9,17 @@ import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.application.Platform;
+import javafx.scene.shape.Circle;
+import javafx.scene.paint.Color;
+import javafx.animation.TranslateTransition;
+import javafx.util.Duration;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Settings screen — configure Ollama connection and application preferences.
  */
 public class SettingsView {
 
-    private static final String BG    = "#F1F5F9";
-    private static final String CARD  = "#FFFFFF";
-    private static final String TEXT  = "#111827";
-    private static final String MUTED = "#6B7280";
-    private static final String BLUE  = "#1D4ED8";
-    private static final String GREEN = "#059669";
-    private static final String RED   = "#DC2626";
 
     private final AppContext ctx = AppContext.getInstance();
 
@@ -46,8 +44,64 @@ public class SettingsView {
         Label title = new Label("Settings");
         title.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
 
-        root.getChildren().addAll(title, buildOllamaCard(), buildAboutCard());
+        root.getChildren().addAll(title, buildAppearanceCard(), buildOllamaCard(), buildAboutCard());
         return root;
+    }
+
+    // ── Appearance card ────────────────────────────────────────────────────
+
+    private VBox buildAppearanceCard() {
+        VBox card = card("Appearance");
+
+        HBox row = new HBox(16);
+        row.setAlignment(Pos.CENTER_LEFT);
+
+        VBox textBlock = new VBox(3);
+        Label heading = new Label("Dark Mode");
+        heading.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
+        Label desc = new Label("Switch between light and dark interface.");
+        desc.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+        textBlock.getChildren().addAll(heading, desc);
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Node toggle = buildToggleSwitch();
+        row.getChildren().addAll(textBlock, spacer, toggle);
+        card.getChildren().add(row);
+        return card;
+    }
+
+    private Node buildToggleSwitch() {
+        boolean dark = ctx.isDarkMode();
+
+        // Track (pill shape)
+        javafx.scene.layout.StackPane track = new javafx.scene.layout.StackPane();
+        track.setPrefSize(48, 26);
+        track.setMaxSize(48, 26);
+        track.setStyle("-fx-background-radius: 13; -fx-background-color: " + (dark ? BLUE : BORDER) + ";");
+        track.setCursor(javafx.scene.Cursor.HAND);
+
+        // Thumb (circle)
+        Circle thumb = new Circle(11);
+        thumb.setFill(Color.WHITE);
+        thumb.setTranslateX(dark ? 11 : -11);
+
+        track.getChildren().add(thumb);
+
+        TranslateTransition anim = new TranslateTransition(Duration.millis(180), thumb);
+
+        final boolean[] state = {dark};
+        track.setOnMouseClicked(e -> {
+            state[0] = !state[0];
+            anim.stop();
+            anim.setToX(state[0] ? 11 : -11);
+            anim.play();
+            track.setStyle("-fx-background-radius: 13; -fx-background-color: " + (state[0] ? BLUE : BORDER) + ";");
+            ctx.setDarkMode(state[0]);
+        });
+
+        return track;
     }
 
     // ── Ollama card ────────────────────────────────────────────────────────
@@ -86,9 +140,9 @@ public class SettingsView {
         Button testBtn  = secondaryBtn("Test Connection");
         Button saveBtn  = primaryBtn("Save & Enable Ollama");
         Button mockBtn  = new Button("Use Mock (testing)");
-        mockBtn.setStyle("-fx-background-color: #F9FAFB; -fx-text-fill: #6B7280; "
+        mockBtn.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + MUTED + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 7 14; "
-            + "-fx-border-color: #E5E7EB; -fx-border-radius: 6;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6;");
 
         testBtn.setOnAction(e -> testConnection());
         saveBtn.setOnAction(e -> saveOllamaSettings());
@@ -211,7 +265,7 @@ public class SettingsView {
         card.getChildren().add(heading);
 
         Separator sep = new Separator();
-        sep.setStyle("-fx-background-color: #E5E7EB;");
+        sep.setStyle("-fx-background-color: " + BORDER + ";");
         card.getChildren().add(sep);
 
         return card;
@@ -219,14 +273,14 @@ public class SettingsView {
 
     private TextField field(String value) {
         TextField f = new TextField(value);
-        f.setStyle("-fx-font-size: 12px; -fx-border-color: #E5E7EB; "
+        f.setStyle("-fx-font-size: 12px; -fx-border-color: " + BORDER + "; "
             + "-fx-border-radius: 5; -fx-background-radius: 5; -fx-padding: 6 10;");
         return f;
     }
 
     private Label label(String text) {
         Label l = new Label(text);
-        l.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #374151;");
+        l.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + DIM + ";");
         l.setPrefWidth(130);
         return l;
     }
@@ -240,9 +294,9 @@ public class SettingsView {
 
     private Button secondaryBtn(String text) {
         Button b = new Button(text);
-        b.setStyle("-fx-background-color: #EFF6FF; -fx-text-fill: " + BLUE + "; "
+        b.setStyle("-fx-background-color: " + BTN_BG_SECONDARY + "; -fx-text-fill: " + BLUE + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 7 14; "
-            + "-fx-border-color: #BFDBFE; -fx-border-radius: 6;");
+            + "-fx-border-color: " + BTN_BORDER_SECONDARY + "; -fx-border-radius: 6;");
         return b;
     }
 }

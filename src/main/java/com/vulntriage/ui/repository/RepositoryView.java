@@ -39,6 +39,7 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Repository Manager screen.
@@ -49,11 +50,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class RepositoryView {
 
-    private static final String BG      = "#F1F5F9";
-    private static final String CARD_BG = "#FFFFFF";
-    private static final String ACCENT  = "#1D4ED8";
-    private static final String TEXT    = "#111827";
-    private static final String MUTED   = "#6B7280";
 
     private final AppContext ctx = AppContext.getInstance();
     private final ObservableList<RepositoryRow> rows = FXCollections.observableArrayList();
@@ -85,7 +81,7 @@ public class RepositoryView {
         bar.setPadding(new Insets(20, 28, 16, 28));
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setStyle("-fx-background-color: " + CARD_BG + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 1 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
         VBox titleBlock = new VBox(2);
         Label title = new Label("Repositories");
@@ -588,15 +584,15 @@ public class RepositoryView {
         if (scanning) {
             scanBtn.setText("⏳  Scanning…");
             scanBtn.setDisable(true);
-            scanBtn.setStyle("-fx-background-color: #EFF6FF; -fx-text-fill: #1D4ED8; "
+            scanBtn.setStyle("-fx-background-color: " + BTN_BG_SECONDARY + "; -fx-text-fill: #1D4ED8; "
                 + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 7 16; "
-                + "-fx-border-color: #BFDBFE; -fx-border-radius: 6px;");
+                + "-fx-border-color: " + BTN_BORDER_SECONDARY + "; -fx-border-radius: 6px;");
         } else {
             scanBtn.setText("▶  Scan Selected");
             scanBtn.setDisable(false);
-            scanBtn.setStyle("-fx-background-color: #EFF6FF; -fx-text-fill: #1D4ED8; "
+            scanBtn.setStyle("-fx-background-color: " + BTN_BG_SECONDARY + "; -fx-text-fill: #1D4ED8; "
                 + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 7 16; "
-                + "-fx-border-color: #BFDBFE; -fx-border-radius: 6px;");
+                + "-fx-border-color: " + BTN_BORDER_SECONDARY + "; -fx-border-radius: 6px;");
         }
     }
 
@@ -632,7 +628,7 @@ public class RepositoryView {
 
     private Label fieldLabel(String text) {
         Label l = new Label(text);
-        l.setStyle("-fx-font-weight: bold; -fx-text-fill: #374151;");
+        l.setStyle("-fx-font-weight: bold; -fx-text-fill: " + DIM + ";");
         return l;
     }
 
@@ -645,17 +641,17 @@ public class RepositoryView {
 
     private Button secondaryBtn(String text) {
         Button b = new Button(text);
-        b.setStyle("-fx-background-color: #EFF6FF; -fx-text-fill: " + ACCENT + "; "
+        b.setStyle("-fx-background-color: " + BTN_BG_SECONDARY + "; -fx-text-fill: " + ACCENT + "; "
             + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 7 16; "
-            + "-fx-border-color: #BFDBFE; -fx-border-radius: 6px;");
+            + "-fx-border-color: " + BTN_BORDER_SECONDARY + "; -fx-border-radius: 6px;");
         return b;
     }
 
     private Button dangerBtn(String text) {
         Button b = new Button(text);
-        b.setStyle("-fx-background-color: #FEF2F2; -fx-text-fill: #DC2626; "
+        b.setStyle("-fx-background-color: " + RED_LIGHT_BG + "; -fx-text-fill: #DC2626; "
             + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 7 16; "
-            + "-fx-border-color: #FECACA; -fx-border-radius: 6px;");
+            + "-fx-border-color: " + RED_BORDER + "; -fx-border-radius: 6px;");
         return b;
     }
 

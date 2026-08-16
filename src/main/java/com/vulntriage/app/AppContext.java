@@ -1,6 +1,7 @@
 package com.vulntriage.app;
 
 import com.vulntriage.config.AppConfig;
+import com.vulntriage.config.ThemeColors;
 import com.vulntriage.repository.CachingFindingRepository;
 import com.vulntriage.repository.api.WorkflowRepository;
 import com.vulntriage.repository.api.PromptTemplateRepository;
@@ -59,6 +60,11 @@ public class AppContext {
         AppConfig cfg = AppConfig.getInstance();
         ollamaUrl   = cfg.getOllamaUrl();
         ollamaModel = cfg.getOllamaModel();
+
+        // Load and apply persisted theme
+        boolean dark = cfg.isDarkMode();
+        ThemeColors.apply(dark);
+        darkMode.set(dark);
 
         // Auto-enable Ollama if settings were previously saved
         // Without this, triageStrategy stays as Mock even after app restart
@@ -126,6 +132,18 @@ public class AppContext {
     public boolean isWorkflowRunning() { return workflowRunning.get(); }
     public void setWorkflowRunning(boolean running) {
         javafx.application.Platform.runLater(() -> workflowRunning.set(running));
+    }
+
+    // ── Dark mode state ────────────────────────────────────────────────────
+    private final javafx.beans.property.BooleanProperty darkMode =
+        new javafx.beans.property.SimpleBooleanProperty(false);
+
+    public javafx.beans.property.BooleanProperty darkModeProperty() { return darkMode; }
+    public boolean isDarkMode() { return darkMode.get(); }
+    public void setDarkMode(boolean dark) {
+        ThemeColors.apply(dark);
+        AppConfig.getInstance().saveDarkMode(dark);
+        javafx.application.Platform.runLater(() -> darkMode.set(dark));
     }
 
     // ── Scan state ─────────────────────────────────────────────────────────

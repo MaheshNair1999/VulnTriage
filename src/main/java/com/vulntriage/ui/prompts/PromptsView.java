@@ -14,6 +14,7 @@ import javafx.scene.control.ButtonBar;
 import javafx.scene.layout.*;
 
 import java.util.List;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Prompt Management screen.
@@ -26,13 +27,6 @@ import java.util.List;
  */
 public class PromptsView {
 
-    private static final String BG    = "#F1F5F9";
-    private static final String CARD  = "#FFFFFF";
-    private static final String TEXT  = "#111827";
-    private static final String MUTED = "#6B7280";
-    private static final String BLUE  = "#1D4ED8";
-    private static final String GREEN = "#059669";
-    private static final String RED   = "#DC2626";
 
     private final AppContext ctx = AppContext.getInstance();
 
@@ -67,7 +61,7 @@ public class PromptsView {
         header.setPadding(new Insets(18, 28, 14, 28));
         header.setAlignment(Pos.CENTER_LEFT);
         header.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 1 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
         VBox titleBlock = new VBox(2);
         Label title = new Label("Prompt Templates");
@@ -96,7 +90,7 @@ public class PromptsView {
         panel.setMinWidth(220);
         panel.setPadding(new Insets(20, 16, 20, 24));
         panel.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 1 0 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 1 0 0;");
 
         Label heading = new Label("Templates");
         heading.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
@@ -174,9 +168,9 @@ public class PromptsView {
         deleteBtn = new Button("Delete");
         deleteBtn.setMaxWidth(Double.MAX_VALUE);
         deleteBtn.setDisable(true);
-        deleteBtn.setStyle("-fx-background-color: #FEF2F2; -fx-text-fill: " + RED + "; "
+        deleteBtn.setStyle("-fx-background-color: " + RED_LIGHT_BG + "; -fx-text-fill: " + RED + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; "
-            + "-fx-border-color: #FECACA; -fx-border-radius: 6;");
+            + "-fx-border-color: " + RED_BORDER + "; -fx-border-radius: 6;");
         deleteBtn.setOnAction(e -> deleteSelected());
 
         panel.getChildren().addAll(heading, listView, addBtn, deleteBtn);
@@ -372,21 +366,21 @@ public class PromptsView {
 
     private Label fieldLabel(String text) {
         Label l = new Label(text);
-        l.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #374151;");
+        l.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: " + DIM + ";");
         return l;
     }
 
     private TextField styledField(String prompt) {
         TextField f = new TextField();
         f.setPromptText(prompt);
-        f.setStyle("-fx-font-size: 12px; -fx-border-color: #E5E7EB; "
+        f.setStyle("-fx-font-size: 12px; -fx-border-color: " + BORDER + "; "
             + "-fx-border-radius: 5; -fx-background-radius: 5; -fx-padding: 5 8;");
         return f;
     }
 
     private void styleArea(TextArea a) {
         a.setStyle(a.getStyle()
-            + "-fx-border-color: #E5E7EB; -fx-border-radius: 5; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 5; "
             + "-fx-background-radius: 5; -fx-padding: 4;");
     }
 

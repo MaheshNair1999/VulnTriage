@@ -17,6 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Startup project-selector screen shown before the main app initialises.
@@ -29,11 +30,6 @@ import java.util.stream.Collectors;
  */
 public class ProjectSelectorView {
 
-    private static final String BG    = "#F1F5F9";
-    private static final String CARD  = "#FFFFFF";
-    private static final String TEXT  = "#111827";
-    private static final String MUTED = "#6B7280";
-    private static final String BLUE  = "#1D4ED8";
     private static final String MONO  = "Courier New";
 
     private static final Path PROJECTS_DIR = resolveProjectsDir();
@@ -77,7 +73,7 @@ public class ProjectSelectorView {
         VBox header = new VBox(6);
         header.setPadding(new Insets(36, 40, 28, 40));
         header.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 1 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
         Label title = new Label("VulnTriage");
         title.setStyle("-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: " + BLUE + ";");
@@ -169,24 +165,24 @@ public class ProjectSelectorView {
         openBtn.setGraphic(graphic);
         openBtn.setMaxWidth(Double.MAX_VALUE);
         openBtn.setStyle("-fx-background-color: white; -fx-background-radius: 9; "
-            + "-fx-border-color: #E5E7EB; -fx-border-radius: 9; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 9; "
             + "-fx-padding: 14 18; -fx-cursor: hand; -fx-alignment: CENTER-LEFT;");
         openBtn.setOnAction(e -> onProjectSelected.accept(db.toAbsolutePath()));
         openBtn.setOnMouseEntered(e -> openBtn.setStyle(
-            "-fx-background-color: #F8FAFC; -fx-background-radius: 9; "
+            "-fx-background-color: " + SURFACE2 + "; -fx-background-radius: 9; "
             + "-fx-border-color: " + BLUE + "; -fx-border-radius: 9; "
             + "-fx-padding: 14 18; -fx-cursor: hand; -fx-alignment: CENTER-LEFT;"));
         openBtn.setOnMouseExited(e -> openBtn.setStyle(
             "-fx-background-color: white; -fx-background-radius: 9; "
-            + "-fx-border-color: #E5E7EB; -fx-border-radius: 9; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 9; "
             + "-fx-padding: 14 18; -fx-cursor: hand; -fx-alignment: CENTER-LEFT;"));
         HBox.setHgrow(openBtn, Priority.ALWAYS);
 
         Button deleteBtn = new Button("Delete");
         deleteBtn.setMinWidth(Region.USE_PREF_SIZE);
-        deleteBtn.setStyle("-fx-background-color: #FEF2F2; -fx-text-fill: #DC2626; "
+        deleteBtn.setStyle("-fx-background-color: " + RED_LIGHT_BG + "; -fx-text-fill: #DC2626; "
             + "-fx-font-size: 12px; -fx-font-weight: bold; -fx-background-radius: 7; "
-            + "-fx-border-color: #FECACA; -fx-border-radius: 7; "
+            + "-fx-border-color: " + RED_BORDER + "; -fx-border-radius: 7; "
             + "-fx-padding: 8 12; -fx-cursor: hand;");
         deleteBtn.setOnAction(e -> {
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,

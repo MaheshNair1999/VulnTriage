@@ -27,6 +27,7 @@ import javafx.stage.FileChooser;
 import java.io.File;
 import java.util.List;
 import java.util.Optional;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Evaluation screen — shows the full evaluation metrics for a triage run.
@@ -39,14 +40,6 @@ import java.util.Optional;
  */
 public class EvaluationView {
 
-    private static final String BG    = "#F1F5F9";
-    private static final String CARD  = "#FFFFFF";
-    private static final String TEXT  = "#111827";
-    private static final String MUTED = "#6B7280";
-    private static final String BLUE  = "#1D4ED8";
-    private static final String GREEN = "#059669";
-    private static final String RED   = "#DC2626";
-    private static final String AMBER = "#D97706";
 
     private final AppContext       ctx        = AppContext.getInstance();
     private final MetricsCalculator calculator = new MetricsCalculator();
@@ -76,7 +69,7 @@ public class EvaluationView {
         header.setPadding(new Insets(18, 28, 14, 28));
         header.setAlignment(Pos.CENTER_LEFT);
         header.setStyle("-fx-background-color: " + CARD + "; "
-            + "-fx-border-color: #E5E7EB; -fx-border-width: 0 0 1 0;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
         VBox titleBlock = new VBox(2);
         Label title = new Label("Evaluation");
@@ -364,7 +357,7 @@ public class EvaluationView {
         cell.setAlignment(Pos.CENTER);
         cell.setPrefWidth(120); cell.setPrefHeight(56);
         cell.setStyle("-fx-background-color: "
-            + (diagonal ? lighten(accentColor) : "#F9FAFB") + "; "
+            + (diagonal ? lighten(accentColor) : "" + SURFACE + "") + "; "
             + "-fx-background-radius: 6;");
 
         Label val = new Label(String.valueOf(value));
@@ -559,13 +552,13 @@ public class EvaluationView {
 
             grid.add(compLabel(r.label()),                         0, i + 1);
             grid.add(compValue(pct(r.base()), BLUE),               1, i + 1);
-            grid.add(compValue(pct(r.vs()),  "#7C3AED"),           2, i + 1);
+            grid.add(compValue(pct(r.vs()),  " + PURPLE + "),           2, i + 1);
             grid.add(compValue(sign + pct(delta), deltaColor),     3, i + 1);
         }
 
         grid.add(compLabel("Findings Processed"),                  0, rows.size() + 1);
         grid.add(compValue(String.valueOf(mBase.total()), BLUE),   1, rows.size() + 1);
-        grid.add(compValue(String.valueOf(mVs.total()),  "#7C3AED"), 2, rows.size() + 1);
+        grid.add(compValue(String.valueOf(mVs.total()),  " + PURPLE + "), 2, rows.size() + 1);
         grid.add(compLabel("—"),                                   3, rows.size() + 1);
 
         VBox card = new VBox(8);
@@ -581,7 +574,7 @@ public class EvaluationView {
         l.setAlignment(Pos.CENTER);
         l.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; "
             + "-fx-text-fill: " + MUTED + "; -fx-padding: 4 10; "
-            + "-fx-background-color: #F9FAFB; -fx-background-radius: 4;");
+            + "-fx-background-color: " + SURFACE + "; -fx-background-radius: 4;");
         return l;
     }
 
@@ -838,7 +831,7 @@ public class EvaluationView {
             );
         }
         summaryCards.getChildren().add(
-            breakdownCard("LLM Agreement", agreementPct, reviewed > 0 ? "#7C3AED" : MUTED, "LLM matched manual verdict")
+            breakdownCard("LLM Agreement", agreementPct, reviewed > 0 ? " + PURPLE + " : MUTED, "LLM matched manual verdict")
         );
         summaryCards.getChildren().forEach(n -> HBox.setHgrow(n, Priority.ALWAYS));
 
@@ -930,7 +923,7 @@ public class EvaluationView {
         ta.setEditable(false);
         ta.setWrapText(true);
         ta.setPrefHeight(prefHeight);
-        ta.setStyle("-fx-font-size: 12px; -fx-background-color: #F9FAFB;");
+        ta.setStyle("-fx-font-size: 12px; -fx-background-color: " + SURFACE + ";");
         return ta;
     }
 
@@ -1063,11 +1056,11 @@ public class EvaluationView {
 
     private String lighten(String hex) {
         return switch (hex) {
-            case "#059669" -> "#D1FAE5";
-            case "#DC2626" -> "#FEE2E2";
-            case "#D97706" -> "#FEF3C7";
-            case "#1D4ED8" -> "#DBEAFE";
-            default        -> "#F3F4F6";
+            case " + GREEN + " -> "" + GREEN_BG + "";
+            case " + RED + " -> "" + RED_BG + "";
+            case " + AMBER + " -> "" + AMBER_BG + "";
+            case " + BLUE + " -> "" + BLUE_BG + "";
+            default        -> "" + NEUTRAL_BG + "";
         };
     }
 
@@ -1080,17 +1073,17 @@ public class EvaluationView {
 
     private Button secondaryBtn(String text) {
         Button b = new Button(text);
-        b.setStyle("-fx-background-color: #F9FAFB; -fx-text-fill: #374151; "
+        b.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + DIM + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 7 14; "
-            + "-fx-border-color: #E5E7EB; -fx-border-radius: 6;");
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6;");
         return b;
     }
 
     private Button deleteBtn(String text) {
         Button b = new Button(text);
-        b.setStyle("-fx-background-color: #FEF2F2; -fx-text-fill: " + RED + "; "
+        b.setStyle("-fx-background-color: " + RED_LIGHT_BG + "; -fx-text-fill: " + RED + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 7 14; "
-            + "-fx-border-color: #FECACA; -fx-border-radius: 6;");
+            + "-fx-border-color: " + RED_BORDER + "; -fx-border-radius: 6;");
         return b;
     }
 

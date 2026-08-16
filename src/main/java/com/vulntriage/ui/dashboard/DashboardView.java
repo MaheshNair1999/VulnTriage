@@ -16,6 +16,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 
 import java.util.List;
+import static com.vulntriage.config.ThemeColors.*;
 
 /**
  * Dashboard — first screen the user sees.
@@ -31,14 +32,6 @@ import java.util.List;
  */
 public class DashboardView {
 
-    private static final String BG      = "#F1F5F9";
-    private static final String CARD_BG = "#FFFFFF";
-    private static final String ACCENT  = "#1D4ED8";
-    private static final String GREEN   = "#059669";
-    private static final String RED     = "#DC2626";
-    private static final String AMBER   = "#D97706";
-    private static final String TEXT    = "#111827";
-    private static final String MUTED   = "#6B7280";
 
     private static final long ALL_REPOS = -1L;
 
@@ -347,10 +340,10 @@ public class DashboardView {
 
         HBox cards = new HBox(16);
         cards.getChildren().addAll(
-            scannerCard("ERROR",   errCount,  "#7F1D1D", "#FEF2F2", accent),
-            scannerCard("WARNING", warnCount, "#92400E", "#FFFBEB", accent),
+            scannerCard("ERROR",   errCount,  "" + RED_EXTRA + "", "" + RED_LIGHT_BG + "", accent),
+            scannerCard("WARNING", warnCount, "" + AMBER_DIM + "", "#FFFBEB", accent),
             scannerCard("INFO",    infoCount, "#166534", "#F0FDF4", accent),
-            scannerCard("TOTAL",   total,     "#1E3A8A", "#EFF6FF", accent)
+            scannerCard("TOTAL",   total,     "" + BLUE_EXTRA + "", "" + BTN_BG_SECONDARY + "", accent)
         );
         cards.getChildren().forEach(n -> HBox.setHgrow(n, Priority.ALWAYS));
 
