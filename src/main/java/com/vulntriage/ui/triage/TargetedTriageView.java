@@ -333,7 +333,7 @@ public class TargetedTriageView {
         previewTable = new TableView<>(previewRows);
         TableView<FindingRow> table = previewTable;
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        table.setStyle("-fx-background-color: white; -fx-background-radius: 8px;");
+        table.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 8px;");
         table.setPlaceholder(new Label("No findings matched yet."));
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         VBox.setVgrow(table, Priority.ALWAYS);
@@ -411,7 +411,7 @@ public class TargetedTriageView {
 
         TableView<TriageView.ResultRow> table = new TableView<>(resultRows);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        table.setStyle("-fx-background-color: white; -fx-background-radius: 8px;");
+        table.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 8px;");
         table.setPlaceholder(new Label("Triage in progress…"));
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         VBox.setVgrow(table, Priority.ALWAYS);

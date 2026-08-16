@@ -246,7 +246,7 @@ public class FindingsView {
     private Node buildTable() {
         table = new TableView<>(sortedRows);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        table.setStyle("-fx-background-color: white;");
+        table.setStyle("-fx-background-color: " + CARD + ";");
         table.setPlaceholder(new Label("No findings match the current filter."));
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
 

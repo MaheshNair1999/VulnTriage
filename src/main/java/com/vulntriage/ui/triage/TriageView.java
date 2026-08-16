@@ -138,7 +138,7 @@ public class TriageView {
 
         TableView<ResultRow> table = new TableView<>(filteredRows);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        table.setStyle("-fx-background-color: white; -fx-background-radius: 8px;");
+        table.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 8px;");
         table.setPlaceholder(new Label("No triage results yet. Run the triage to see results."));
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         VBox.setVgrow(table, Priority.ALWAYS);

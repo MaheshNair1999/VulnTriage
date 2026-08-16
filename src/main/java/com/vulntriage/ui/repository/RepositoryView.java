@@ -124,7 +124,7 @@ public class RepositoryView {
         VBox.setVgrow(area, Priority.ALWAYS);
 
         table = new TableView<>(rows);
-        table.setStyle("-fx-background-color: white; -fx-background-radius: 8px; "
+        table.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 8px; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 6, 0, 0, 2);");
         table.setPlaceholder(new Label("No repositories yet. Click '+ Add Repository' to begin."));
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
