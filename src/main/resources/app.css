@@ -1,0 +1,11 @@
+/* ── Column + row separator lines for all TableViews (light mode base) ────── */
+.table-cell {
+    -fx-border-color: transparent #D1D5DB #E5E7EB transparent;
+    -fx-border-width: 0 1 1 0;
+}
+
+/* Last column has no right border */
+.table-row-cell:last-visible .table-cell {
+    -fx-border-color: transparent transparent #E5E7EB transparent;
+    -fx-border-width: 0 0 1 0;
+}

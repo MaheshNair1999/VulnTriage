@@ -1,6 +1,7 @@
 package com.vulntriage.ui.triage;
 
 import com.vulntriage.app.AppContext;
+import com.vulntriage.ui.UIUtils;
 import com.vulntriage.domain.LlmResult;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -248,6 +249,7 @@ public class TriageView {
 
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Triage Detail");
+        UIUtils.applyTheme(dialog);
         dialog.setHeaderText(
             (finding.getRuleId() != null ? finding.getRuleId() : "—")
             + "  ·  "
@@ -285,9 +287,8 @@ public class TriageView {
         codeArea.setEditable(false);
         codeArea.setWrapText(false);
         codeArea.setPrefHeight(110);
-        codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px; "
-            + "-fx-background-color: #1E1E2E; -fx-text-fill: #CDD6F4; "
-            + "-fx-control-inner-background: #1E1E2E;");
+        codeArea.getStyleClass().add("code-snippet");
+        codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px; -fx-text-fill: #CDD6F4;");
 
         // ── Reasoning ──────────────────────────────────────────────────────
         Label reasonHead = sectionLabel("LLM Reasoning");
@@ -318,6 +319,7 @@ public class TriageView {
         scroll.setPrefHeight(620);
         scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
         dialog.getDialogPane().setContent(scroll);
+        UIUtils.fixCodeSnippetBackground(dialog, codeArea);
         dialog.showAndWait();
     }
 

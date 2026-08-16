@@ -1,6 +1,7 @@
 package com.vulntriage.app;
 
 import com.vulntriage.config.AppConfig;
+import com.vulntriage.config.GlobalPrefs;
 import com.vulntriage.config.ThemeColors;
 import com.vulntriage.repository.CachingFindingRepository;
 import com.vulntriage.repository.api.WorkflowRepository;
@@ -61,8 +62,8 @@ public class AppContext {
         ollamaUrl   = cfg.getOllamaUrl();
         ollamaModel = cfg.getOllamaModel();
 
-        // Load and apply persisted theme
-        boolean dark = cfg.isDarkMode();
+        // Load and apply persisted theme (global prefs, not per-project DB)
+        boolean dark = GlobalPrefs.isDarkMode();
         ThemeColors.apply(dark);
         darkMode.set(dark);
 
@@ -142,7 +143,7 @@ public class AppContext {
     public boolean isDarkMode() { return darkMode.get(); }
     public void setDarkMode(boolean dark) {
         ThemeColors.apply(dark);
-        AppConfig.getInstance().saveDarkMode(dark);
+        GlobalPrefs.saveDarkMode(dark);
         javafx.application.Platform.runLater(() -> darkMode.set(dark));
     }
 

@@ -9,10 +9,6 @@ import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.application.Platform;
-import javafx.scene.shape.Circle;
-import javafx.scene.paint.Color;
-import javafx.animation.TranslateTransition;
-import javafx.util.Duration;
 import static com.vulntriage.config.ThemeColors.*;
 
 /**
@@ -44,64 +40,8 @@ public class SettingsView {
         Label title = new Label("Settings");
         title.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
 
-        root.getChildren().addAll(title, buildAppearanceCard(), buildOllamaCard(), buildAboutCard());
+        root.getChildren().addAll(title, buildOllamaCard(), buildAboutCard());
         return root;
-    }
-
-    // ── Appearance card ────────────────────────────────────────────────────
-
-    private VBox buildAppearanceCard() {
-        VBox card = card("Appearance");
-
-        HBox row = new HBox(16);
-        row.setAlignment(Pos.CENTER_LEFT);
-
-        VBox textBlock = new VBox(3);
-        Label heading = new Label("Dark Mode");
-        heading.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
-        Label desc = new Label("Switch between light and dark interface.");
-        desc.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
-        textBlock.getChildren().addAll(heading, desc);
-
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        Node toggle = buildToggleSwitch();
-        row.getChildren().addAll(textBlock, spacer, toggle);
-        card.getChildren().add(row);
-        return card;
-    }
-
-    private Node buildToggleSwitch() {
-        boolean dark = ctx.isDarkMode();
-
-        // Track (pill shape)
-        javafx.scene.layout.StackPane track = new javafx.scene.layout.StackPane();
-        track.setPrefSize(48, 26);
-        track.setMaxSize(48, 26);
-        track.setStyle("-fx-background-radius: 13; -fx-background-color: " + (dark ? BLUE : BORDER) + ";");
-        track.setCursor(javafx.scene.Cursor.HAND);
-
-        // Thumb (circle)
-        Circle thumb = new Circle(11);
-        thumb.setFill(Color.WHITE);
-        thumb.setTranslateX(dark ? 11 : -11);
-
-        track.getChildren().add(thumb);
-
-        TranslateTransition anim = new TranslateTransition(Duration.millis(180), thumb);
-
-        final boolean[] state = {dark};
-        track.setOnMouseClicked(e -> {
-            state[0] = !state[0];
-            anim.stop();
-            anim.setToX(state[0] ? 11 : -11);
-            anim.play();
-            track.setStyle("-fx-background-radius: 13; -fx-background-color: " + (state[0] ? BLUE : BORDER) + ";");
-            ctx.setDarkMode(state[0]);
-        });
-
-        return track;
     }
 
     // ── Ollama card ────────────────────────────────────────────────────────

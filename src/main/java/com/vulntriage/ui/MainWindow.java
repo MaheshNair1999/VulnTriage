@@ -60,6 +60,12 @@ public class MainWindow {
         stage.setMaximized(false);
         stage.setMaximized(true);
         stage.show();
+        javafx.application.Platform.runLater(
+            () -> WindowsDarkMode.apply(AppContext.getInstance().isDarkMode()));
+
+        // Base stylesheet — always loaded (column separators, shared overrides)
+        java.net.URL appCssUrl = getClass().getResource("/app.css");
+        if (appCssUrl != null) scene.getStylesheets().add(appCssUrl.toExternalForm());
 
         // Load the dark mode CSS resource URL once
         java.net.URL cssUrl = getClass().getResource("/dark-mode.css");
@@ -76,6 +82,7 @@ public class MainWindow {
                 if (isOn)  scene.getStylesheets().add(darkCss);
                 else       scene.getStylesheets().remove(darkCss);
             }
+            WindowsDarkMode.apply(isOn);
             viewCache.clear();
             triageViewNode = null;
             navButtons.clear();
@@ -93,6 +100,9 @@ public class MainWindow {
 
     private void switchProject() {
         stage.setMaximized(false);
+        stage.setWidth(720);
+        stage.setHeight(580);
+        stage.centerOnScreen();
         ProjectSelectorView selector = new ProjectSelectorView(path -> Main.openProject(stage, path));
         stage.setTitle("VulnTriage — Select Project");
         stage.setScene(selector.build(stage));

@@ -1,15 +1,19 @@
 package com.vulntriage.ui;
 
+import javafx.animation.TranslateTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
-import com.vulntriage.app.AppContext;
+import com.vulntriage.config.GlobalPrefs;
 import com.vulntriage.config.ThemeColors;
 import java.io.File;
 import java.nio.file.*;
@@ -61,20 +65,19 @@ public class ProjectSelectorView {
         this.stage = stage;
         ensureProjectsDir();
 
+        // Apply theme before building UI so all color tokens are correct at construction time
+        boolean dark = GlobalPrefs.isDarkMode();
+        ThemeColors.apply(dark);
+
         VBox root = new VBox(0);
         root.setStyle("-fx-background-color: " + BG + ";");
-
         root.getChildren().addAll(buildHeader(), buildContent());
 
         Scene scene = new Scene(root, 720, 540);
-        try {
-            boolean dark = AppContext.getInstance().isDarkMode();
-            if (dark) {
-                java.net.URL css = getClass().getResource("/dark-mode.css");
-                if (css != null) scene.getStylesheets().add(css.toExternalForm());
-                ThemeColors.apply(true);
-            }
-        } catch (Exception ignored) {}
+        if (dark) {
+            java.net.URL css = getClass().getResource("/dark-mode.css");
+            if (css != null) scene.getStylesheets().add(css.toExternalForm());
+        }
         return scene;
     }
 
@@ -92,8 +95,52 @@ public class ProjectSelectorView {
         Label sub = new Label("Select a project database to continue, or create a new one.");
         sub.setStyle("-fx-font-size: 13px; -fx-text-fill: " + MUTED + ";");
 
-        header.getChildren().addAll(title, sub);
+        VBox titlePart = new VBox(4, title, sub);
+        HBox.setHgrow(titlePart, Priority.ALWAYS);
+
+        HBox titleRow = new HBox(titlePart, buildThemeToggle());
+        titleRow.setAlignment(Pos.CENTER);
+
+        header.getChildren().add(titleRow);
         return header;
+    }
+
+    private Node buildThemeToggle() {
+        boolean dark = GlobalPrefs.isDarkMode();
+
+        Label icon = new Label(dark ? "☾" : "☀");
+        icon.setStyle("-fx-font-size: 13px; -fx-text-fill: " + MUTED + ";");
+
+        StackPane track = new StackPane();
+        track.setPrefSize(40, 22);
+        track.setMaxSize(40, 22);
+        track.setStyle("-fx-background-radius: 11; -fx-background-color: " + (dark ? BLUE : BORDER) + ";");
+        track.setCursor(javafx.scene.Cursor.HAND);
+
+        Circle thumb = new Circle(9);
+        thumb.setFill(Color.WHITE);
+        thumb.setTranslateX(dark ? 9 : -9);
+        track.getChildren().add(thumb);
+
+        TranslateTransition anim = new TranslateTransition(Duration.millis(150), thumb);
+
+        final boolean[] state = {dark};
+        track.setOnMouseClicked(e -> {
+            state[0] = !state[0];
+            anim.stop();
+            anim.setToX(state[0] ? 9 : -9);
+            anim.play();
+            track.setStyle("-fx-background-radius: 11; -fx-background-color: " + (state[0] ? BLUE : BORDER) + ";");
+            icon.setText(state[0] ? "☾" : "☀");
+            GlobalPrefs.saveDarkMode(state[0]);
+            ThemeColors.apply(state[0]);
+            stage.setScene(build(stage));
+            WindowsDarkMode.apply(state[0]);
+        });
+
+        HBox toggle = new HBox(8, icon, track);
+        toggle.setAlignment(Pos.CENTER_RIGHT);
+        return toggle;
     }
 
     // ── Content ────────────────────────────────────────────────────────────

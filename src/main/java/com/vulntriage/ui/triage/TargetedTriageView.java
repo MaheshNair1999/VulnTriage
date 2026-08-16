@@ -1,6 +1,7 @@
 package com.vulntriage.ui.triage;
 
 import com.vulntriage.app.AppContext;
+import com.vulntriage.ui.UIUtils;
 import com.vulntriage.domain.EvaluationRun;
 import com.vulntriage.domain.Finding;
 import com.vulntriage.domain.LlmResult;
@@ -892,6 +893,7 @@ public class TargetedTriageView {
 
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Triage Detail");
+        UIUtils.applyTheme(dialog);
         dialog.setHeaderText(
             (f.getRuleId()   != null ? f.getRuleId()   : "—") + "  ·  "
             + (f.getFilePath() != null ? f.getFilePath() : "—"));
@@ -922,9 +924,8 @@ public class TargetedTriageView {
         codeArea.setEditable(false);
         codeArea.setWrapText(false);
         codeArea.setPrefHeight(100);
-        codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px; "
-            + "-fx-background-color: #1E1E2E; -fx-text-fill: #CDD6F4; "
-            + "-fx-control-inner-background: #1E1E2E;");
+        codeArea.getStyleClass().add("code-snippet");
+        codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px; -fx-text-fill: #CDD6F4;");
 
         content.getChildren().addAll(reasonHead, reasonArea, remHead, remArea, codeHead, codeArea);
 
@@ -933,6 +934,7 @@ public class TargetedTriageView {
         scroll.setPrefHeight(540);
         scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
         dialog.getDialogPane().setContent(scroll);
+        UIUtils.fixCodeSnippetBackground(dialog, codeArea);
         dialog.showAndWait();
     }
 
@@ -944,6 +946,7 @@ public class TargetedTriageView {
 
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Finding Detail");
+        UIUtils.applyTheme(dialog);
         dialog.setHeaderText(null);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.getDialogPane().setPrefWidth(740);
@@ -991,8 +994,8 @@ public class TargetedTriageView {
         snippetArea.setWrapText(false);
         snippetArea.setPrefHeight(180);
         snippetArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px; "
-            + "-fx-background-color: #1E1E2E; -fx-text-fill: #CDD6F4; "
-            + "-fx-control-inner-background: #1E1E2E; -fx-border-color: #313244; "
+            + "-fx-background-color: #070B14; -fx-text-fill: #CDD6F4; "
+            + "-fx-control-inner-background: #070B14; -fx-border-color: #334155; "
             + "-fx-border-radius: 6; -fx-background-radius: 6;");
         snippetArea.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) showFullFileDialog(f);
@@ -1005,6 +1008,7 @@ public class TargetedTriageView {
         scroll.setFitToWidth(true);
         scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
         dialog.getDialogPane().setContent(scroll);
+        UIUtils.fixCodeSnippetBackground(dialog, snippetArea);
         dialog.showAndWait();
     }
 
@@ -1044,6 +1048,7 @@ public class TargetedTriageView {
 
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Full File");
+        UIUtils.applyTheme(dialog);
         dialog.setHeaderText(resolvedPath);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.getDialogPane().setPrefWidth(860);
@@ -1053,9 +1058,8 @@ public class TargetedTriageView {
         TextArea fileArea = new TextArea(finalText);
         fileArea.setEditable(false);
         fileArea.setWrapText(false);
-        fileArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px; "
-            + "-fx-background-color: #1E1E2E; -fx-text-fill: #CDD6F4; "
-            + "-fx-control-inner-background: #1E1E2E;");
+        fileArea.getStyleClass().add("code-snippet");
+        fileArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px; -fx-text-fill: #CDD6F4;");
 
         Button copyBtn = new Button("Copy All");
         copyBtn.setStyle("-fx-background-color: " + BLUE + "; -fx-text-fill: white; "
@@ -1092,6 +1096,7 @@ public class TargetedTriageView {
         }
 
         dialog.getDialogPane().setContent(body);
+        UIUtils.fixCodeSnippetBackground(dialog, fileArea);
         dialog.showAndWait();
     }
 

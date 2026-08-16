@@ -1,6 +1,7 @@
 package com.vulntriage.ui.findings;
 
 import com.vulntriage.app.AppContext;
+import com.vulntriage.ui.UIUtils;
 import com.vulntriage.domain.Finding;
 import com.vulntriage.domain.Repository;
 import javafx.collections.FXCollections;
@@ -288,11 +289,11 @@ public class FindingsView {
                 if (empty || item == null) { setText(null); setStyle(""); return; }
                 setText(item);
                 String color = switch (item) {
-                    case "TRIVY"     -> " + AMBER + ";
-                    case "GITLEAKS"  -> "" + AMBER_EXTRA + "";
-                    case "CODEQL"    -> " + GREEN + ";
-                    case "SONARQUBE" -> " + RED + ";
-                    default          -> " + BLUE + "; // SEMGREP
+                    case "TRIVY"     -> AMBER;
+                    case "GITLEAKS"  -> AMBER_EXTRA;
+                    case "CODEQL"    -> GREEN;
+                    case "SONARQUBE" -> RED;
+                    default          -> BLUE;
                 };
                 setStyle("-fx-text-fill: " + color + "; -fx-font-weight: bold; -fx-font-size: 10px;");
             }
@@ -360,6 +361,7 @@ public class FindingsView {
         dialog.setTitle("Finding Detail");
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.getDialogPane().setPrefWidth(680);
+        UIUtils.applyTheme(dialog);
 
         VBox content = new VBox(16);
         content.setPadding(new Insets(20));
@@ -406,12 +408,8 @@ public class FindingsView {
         codeArea.setEditable(false);
         codeArea.setWrapText(false);
         codeArea.setPrefRowCount(12);
-        codeArea.setStyle(
-            "-fx-font-family: 'Courier New'; -fx-font-size: 12px; "
-            + "-fx-background-color: #1E1E2E; -fx-text-fill: #CDD6F4; "
-            + "-fx-control-inner-background: #1E1E2E; "
-            + "-fx-border-color: #313244; -fx-border-radius: 6; "
-            + "-fx-background-radius: 6;");
+        codeArea.getStyleClass().add("code-snippet");
+        codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px; -fx-text-fill: #CDD6F4;");
         codeArea.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) showFullCodeDialog(row);
         });
@@ -419,6 +417,7 @@ public class FindingsView {
         content.getChildren().addAll(badges, ruleVal, fileVal, catRow,
             new Separator(), msgHead, msgVal, codeHeader, codeArea);
         dialog.getDialogPane().setContent(content);
+        UIUtils.fixCodeSnippetBackground(dialog, codeArea);
         dialog.showAndWait();
     }
 
@@ -436,14 +435,13 @@ public class FindingsView {
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.getDialogPane().setPrefWidth(800);
         dialog.getDialogPane().setPrefHeight(640);
+        UIUtils.applyTheme(dialog);
 
         TextArea fileArea = new TextArea(content);
         fileArea.setEditable(false);
         fileArea.setWrapText(false);
-        fileArea.setStyle(
-            "-fx-font-family: 'Courier New'; -fx-font-size: 12px; "
-            + "-fx-background-color: #1E1E2E; -fx-text-fill: #CDD6F4; "
-            + "-fx-control-inner-background: #1E1E2E;");
+        fileArea.getStyleClass().add("code-snippet");
+        fileArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px; -fx-text-fill: #CDD6F4;");
 
         final String finalContent = content;
         Button copyBtn = new Button("Copy All");
@@ -464,6 +462,7 @@ public class FindingsView {
         body.getChildren().addAll(toolbar, fileArea);
 
         dialog.getDialogPane().setContent(body);
+        UIUtils.fixCodeSnippetBackground(dialog, fileArea);
         dialog.showAndWait();
     }
 

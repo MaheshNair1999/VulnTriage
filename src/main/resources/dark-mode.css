@@ -56,6 +56,11 @@
 
 .table-cell {
     -fx-text-fill: #E2E8F0;
+    -fx-border-color: transparent #334155 #334155 transparent;
+    -fx-border-width: 0 1 1 0;
+}
+
+.table-row-cell:last-visible .table-cell {
     -fx-border-color: transparent transparent #334155 transparent;
     -fx-border-width: 0 0 1 0;
 }
@@ -98,9 +103,18 @@
     -fx-highlight-text-fill: white;
 }
 
-.text-area .content {
-    -fx-background-color: #1E293B;
-    -fx-text-fill: #E2E8F0;
+
+/* ── Code snippet areas (darker than regular text areas) ─────────────────── */
+.code-snippet {
+    -fx-background-color: #070B14;
+    -fx-control-inner-background: #070B14;
+    -fx-border-color: #334155;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+
+.code-snippet .content {
+    -fx-background-color: #070B14;
 }
 
 .text-area:focused {
@@ -367,6 +381,12 @@
 
 .chart-legend-item-symbol {
     -fx-background-radius: 5;
+}
+
+.chart-title {
+    -fx-text-fill: #E2E8F0;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
 }
 
 .chart-legend-item {

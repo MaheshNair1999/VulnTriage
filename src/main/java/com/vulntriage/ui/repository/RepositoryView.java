@@ -1,6 +1,7 @@
 package com.vulntriage.ui.repository;
 
 import com.vulntriage.app.AppContext;
+import com.vulntriage.ui.UIUtils;
 import com.vulntriage.config.ScanConfig;
 import com.vulntriage.domain.Finding;
 import com.vulntriage.domain.Repository;
@@ -163,6 +164,7 @@ public class RepositoryView {
     private void showAddDialog() {
         Dialog<Repository> dialog = new Dialog<>();
         dialog.setTitle("Add Repository");
+        UIUtils.applyTheme(dialog);
         dialog.setHeaderText("Register a local code repository for scanning.");
 
         ButtonType addType = new ButtonType("Add", ButtonBar.ButtonData.OK_DONE);
@@ -242,6 +244,7 @@ public class RepositoryView {
     private ScannerChoice showScannerPicker() {
         Dialog<ScannerChoice> dialog = new Dialog<>();
         dialog.setTitle("Select Scanners");
+        UIUtils.applyTheme(dialog);
         dialog.setHeaderText("Choose which scanners to run:");
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 

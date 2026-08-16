@@ -1,8 +1,10 @@
 package com.vulntriage.app;
 
+import com.vulntriage.config.GlobalPrefs;
 import com.vulntriage.repository.sqlite.SQLiteConnection;
 import com.vulntriage.ui.MainWindow;
 import com.vulntriage.ui.ProjectSelectorView;
+import com.vulntriage.ui.WindowsDarkMode;
 import javafx.application.Application;
 import javafx.stage.Stage;
 
@@ -49,6 +51,7 @@ public class Main extends Application {
         primaryStage.setScene(scene);
         primaryStage.show();
         primaryStage.requestFocus();
+        javafx.application.Platform.runLater(() -> WindowsDarkMode.apply(GlobalPrefs.isDarkMode()));
     }
 
     public static void openProject(Stage stage, Path dbPath) {

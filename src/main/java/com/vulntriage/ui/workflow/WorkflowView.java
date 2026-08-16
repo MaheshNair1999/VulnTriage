@@ -1,6 +1,7 @@
 package com.vulntriage.ui.workflow;
 
 import com.vulntriage.app.AppContext;
+import com.vulntriage.ui.UIUtils;
 import com.vulntriage.domain.PromptTemplate;
 import com.vulntriage.domain.WorkflowDefinition;
 import com.vulntriage.domain.WorkflowStep;
@@ -159,13 +160,13 @@ public class WorkflowView {
         record StepDef(StepType type, String label, String color) {}
 
         List<StepDef> defs = List.of(
-            new StepDef(StepType.SCAN,   "⊕ Scan",   " + BLUE + "),
-            new StepDef(StepType.SELECT, "⊚ Select", " + TEAL + "),
-            new StepDef(StepType.FILTER, "⊘ Filter", " + PURPLE + "),
+            new StepDef(StepType.SCAN,   "⊕ Scan",   BLUE),
+            new StepDef(StepType.SELECT, "⊚ Select", TEAL),
+            new StepDef(StepType.FILTER, "⊘ Filter", PURPLE),
             new StepDef(StepType.SAMPLE, "⊙ Sample", "#64748B"),
-            new StepDef(StepType.TRIAGE, "◉ Triage", " + AMBER + "),
-            new StepDef(StepType.SCORE,  "★ Score",  " + GREEN + "),
-            new StepDef(StepType.REPORT, "≡ Report", " + RED + ")
+            new StepDef(StepType.TRIAGE, "◉ Triage", AMBER),
+            new StepDef(StepType.SCORE,  "★ Score",  GREEN),
+            new StepDef(StepType.REPORT, "≡ Report", RED)
         );
 
         for (StepDef def : defs) {
@@ -174,7 +175,7 @@ public class WorkflowView {
                 "-fx-background-color: " + CARD + "; -fx-text-fill: " + def.color() + "; "
                 + "-fx-background-radius: 6; -fx-font-size: 11px; -fx-padding: 6 10; "
                 + "-fx-border-color: " + def.color() + "; -fx-border-radius: 6; "
-                + "-fx-border-width: 1;");
+                + "-fx-border-width: 1; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;");
             btn.setOnAction(e -> addStep(def.type()));
             palette.getChildren().add(btn);
         }
@@ -379,7 +380,7 @@ public class WorkflowView {
         jsonPreview.setEditable(false);
         jsonPreview.setPrefRowCount(8);
         jsonPreview.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 10px; "
-            + "-fx-background-color: #1E1E2E; -fx-control-inner-background: #1E1E2E; "
+            + "-fx-background-color: #070B14; -fx-control-inner-background: #070B14; "
             + "-fx-text-fill: #CDD6F4;");
         jsonPreview.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) {
@@ -393,7 +394,7 @@ public class WorkflowView {
                 full.setEditable(false);
                 full.setWrapText(false);
                 full.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 13px; "
-                    + "-fx-background-color: #1E1E2E; -fx-control-inner-background: #1E1E2E; "
+                    + "-fx-background-color: #070B14; -fx-control-inner-background: #070B14; "
                     + "-fx-text-fill: #CDD6F4;");
                 javafx.scene.layout.VBox.setVgrow(full, javafx.scene.layout.Priority.ALWAYS);
 
@@ -454,6 +455,7 @@ public class WorkflowView {
     private void configureTriageStep(StepRow row, int index) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Configure Triage Step");
+        UIUtils.applyTheme(dialog);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         dialog.getDialogPane().setPrefWidth(440);
 
@@ -533,6 +535,7 @@ public class WorkflowView {
     private void configureSelectStep(StepRow row, int index) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Configure Select Step");
+        UIUtils.applyTheme(dialog);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         dialog.getDialogPane().setPrefWidth(460);
 
@@ -613,6 +616,7 @@ public class WorkflowView {
     private void configureGenericStep(StepRow row, int index) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Configure " + row.type.name() + " Step");
+        UIUtils.applyTheme(dialog);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
         GridPane grid = new GridPane();

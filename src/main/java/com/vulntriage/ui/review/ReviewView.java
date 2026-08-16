@@ -1,6 +1,7 @@
 package com.vulntriage.ui.review;
 
 import com.vulntriage.app.AppContext;
+import com.vulntriage.ui.UIUtils;
 import com.vulntriage.command.AssignVerdictCommand;
 import com.vulntriage.command.CommandHistory;
 import com.vulntriage.domain.Finding;
@@ -217,10 +218,10 @@ public class ReviewView {
         codeArea = new TextArea();
         codeArea.setEditable(false);
         codeArea.setPrefRowCount(12);
+        codeArea.getStyleClass().add("code-snippet");
         codeArea.setStyle(
             "-fx-font-family: '" + MONO + "'; -fx-font-size: 12px; "
-            + "-fx-background-color: #1E1E2E; -fx-text-fill: #CDD6F4; "
-            + "-fx-control-inner-background: #1E1E2E; "
+            + "-fx-text-fill: #CDD6F4; "
             + "-fx-border-color: #313244; -fx-border-radius: 6px; "
             + "-fx-background-radius: 6px;");
         codeArea.setFocusTraversable(false); // don't steal focus from root
@@ -532,7 +533,12 @@ public class ReviewView {
         try {
             content = Files.readString(Paths.get(currentFilePath));
         } catch (Exception ex) {
-            content = "(Could not read file: " + ex.getMessage() + ")";
+            // Fall back to the stored code snippet when the file isn't on disk
+            Finding f = !findings.isEmpty() ? findings.get(index) : null;
+            String snippet = f != null ? f.getCodeSnippet() : null;
+            content = (snippet != null && !snippet.isBlank())
+                ? snippet
+                : "(Could not read file: " + currentFilePath + ")";
         }
 
         Dialog<Void> dialog = new Dialog<>();
@@ -541,14 +547,13 @@ public class ReviewView {
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.getDialogPane().setPrefWidth(800);
         dialog.getDialogPane().setPrefHeight(640);
+        UIUtils.applyTheme(dialog);
 
         TextArea fileArea = new TextArea(content);
         fileArea.setEditable(false);
         fileArea.setWrapText(false);
-        fileArea.setStyle(
-            "-fx-font-family: '" + MONO + "'; -fx-font-size: 12px; "
-            + "-fx-background-color: #1E1E2E; -fx-text-fill: #CDD6F4; "
-            + "-fx-control-inner-background: #1E1E2E;");
+        fileArea.getStyleClass().add("code-snippet");
+        fileArea.setStyle("-fx-font-family: '" + MONO + "'; -fx-font-size: 12px; -fx-text-fill: #CDD6F4;");
 
         final String finalContent = content;
         Button copyBtn = new Button("Copy All");
@@ -569,6 +574,7 @@ public class ReviewView {
         body.getChildren().addAll(toolbar, fileArea);
 
         dialog.getDialogPane().setContent(body);
+        UIUtils.fixCodeSnippetBackground(dialog, fileArea);
         dialog.showAndWait();
     }
 

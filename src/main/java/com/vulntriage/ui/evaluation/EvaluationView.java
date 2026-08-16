@@ -533,9 +533,9 @@ public class EvaluationView {
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 8, 0, 0, 2);");
 
         grid.add(compHeader("Metric"),                                     0, 0);
-        grid.add(compHeader(baseVer),                                      1, 0);
-        grid.add(compHeader(vsVer),                                        2, 0);
-        grid.add(compHeader("Δ (" + vsVer + " − " + baseVer + ")"),       3, 0);
+        grid.add(colSep(compHeader(baseVer)),                              1, 0);
+        grid.add(colSep(compHeader(vsVer)),                                2, 0);
+        grid.add(colSep(compHeader("Δ (" + vsVer + " − " + baseVer + ")")), 3, 0);
 
         record Row(String label, double base, double vs, boolean higherIsBetter) {}
         List<Row> rows = List.of(
@@ -550,16 +550,16 @@ public class EvaluationView {
             String sign  = delta >= 0 ? "+" : "";
             String deltaColor = (delta >= 0) == r.higherIsBetter() ? GREEN : RED;
 
-            grid.add(compLabel(r.label()),                         0, i + 1);
-            grid.add(compValue(pct(r.base()), BLUE),               1, i + 1);
-            grid.add(compValue(pct(r.vs()),  " + PURPLE + "),           2, i + 1);
-            grid.add(compValue(sign + pct(delta), deltaColor),     3, i + 1);
+            grid.add(compLabel(r.label()),                               0, i + 1);
+            grid.add(colSep(compValue(pct(r.base()), BLUE)),             1, i + 1);
+            grid.add(colSep(compValue(pct(r.vs()),   PURPLE)),           2, i + 1);
+            grid.add(colSep(compValue(sign + pct(delta), deltaColor)),   3, i + 1);
         }
 
-        grid.add(compLabel("Findings Processed"),                  0, rows.size() + 1);
-        grid.add(compValue(String.valueOf(mBase.total()), BLUE),   1, rows.size() + 1);
-        grid.add(compValue(String.valueOf(mVs.total()),  " + PURPLE + "), 2, rows.size() + 1);
-        grid.add(compLabel("—"),                                   3, rows.size() + 1);
+        grid.add(compLabel("Findings Processed"),                        0, rows.size() + 1);
+        grid.add(colSep(compValue(String.valueOf(mBase.total()), BLUE)), 1, rows.size() + 1);
+        grid.add(colSep(compValue(String.valueOf(mVs.total()), PURPLE)), 2, rows.size() + 1);
+        grid.add(colSep(compLabel("—")),                                 3, rows.size() + 1);
 
         VBox card = new VBox(8);
         card.getChildren().add(grid);
@@ -593,6 +593,13 @@ public class EvaluationView {
         l.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; "
             + "-fx-font-family: 'Courier New'; "
             + "-fx-text-fill: " + color + "; -fx-padding: 4 10;");
+        return l;
+    }
+
+    private Label colSep(Label l) {
+        l.setStyle(l.getStyle()
+            + " -fx-border-color: transparent transparent transparent " + BORDER + ";"
+            + " -fx-border-width: 0 0 0 1;");
         return l;
     }
 
@@ -1055,13 +1062,11 @@ public class EvaluationView {
     }
 
     private String lighten(String hex) {
-        return switch (hex) {
-            case " + GREEN + " -> "" + GREEN_BG + "";
-            case " + RED + " -> "" + RED_BG + "";
-            case " + AMBER + " -> "" + AMBER_BG + "";
-            case " + BLUE + " -> "" + BLUE_BG + "";
-            default        -> "" + NEUTRAL_BG + "";
-        };
+        if (hex.equals(GREEN)) return GREEN_BG;
+        if (hex.equals(RED))   return RED_BG;
+        if (hex.equals(AMBER)) return AMBER_BG;
+        if (hex.equals(BLUE))  return BLUE_BG;
+        return NEUTRAL_BG;
     }
 
     private Button primaryBtn(String text) {
