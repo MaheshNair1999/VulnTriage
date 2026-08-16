@@ -212,8 +212,8 @@ public class PromptsView {
         Label hintLbl = new Label(
             "Placeholders:  {{rule_id}}  {{severity}}  {{category}}  {{message}}  "
             + "{{code_snippet}}  {{line_number}}  {{file_path}}  {{source_context}}");
-        hintLbl.setStyle("-fx-font-size: 10px; -fx-text-fill: #7C3AED; "
-            + "-fx-background-color: #F5F3FF; -fx-padding: 6 10; -fx-background-radius: 4;");
+        hintLbl.setStyle("-fx-font-size: 10px; -fx-text-fill: " + PURPLE + "; "
+            + "-fx-background-color: " + PURPLE_BG + "; -fx-padding: 6 10; -fx-background-radius: 4;");
         hintLbl.setWrapText(true);
 
         // Template text
