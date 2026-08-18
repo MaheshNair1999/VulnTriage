@@ -243,6 +243,6 @@ Tests cover all backend layers: evaluation metrics, CVSS scoring, caching decora
 
 ## Author
 
-**Mahesh Nair** — Cybersecurity MSc Thesis 2026
+**Mahesh Nair** — Cybersecurity BSc Thesis 2026
 
 Supervisors: Prof. Francesco La Rosa · Prof. Pierluigi Dell'Acqua
