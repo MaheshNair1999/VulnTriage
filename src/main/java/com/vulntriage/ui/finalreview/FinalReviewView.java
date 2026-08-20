@@ -340,8 +340,6 @@ public class FinalReviewView {
         VBox section = new VBox(4);
         section.setPadding(new Insets(16, 28, 0, 28));
 
-        if (f.getCodeSnippet() == null || f.getCodeSnippet().isBlank()) return section;
-
         HBox hdr = new HBox(10);
         hdr.setAlignment(Pos.CENTER_LEFT);
         Label lbl = sectionLabel("CODE SNIPPET");
@@ -350,6 +348,14 @@ public class FinalReviewView {
         Label hint = new Label("double-click to view full file");
         hint.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
         hdr.getChildren().addAll(lbl, spacer, hint);
+
+        if (f.getCodeSnippet() == null || f.getCodeSnippet().isBlank()) {
+            Label noSnippet = new Label("No code snippet available for this finding.");
+            noSnippet.setStyle("-fx-font-size: 12px; -fx-text-fill: " + MUTED
+                + "; -fx-font-style: italic;");
+            section.getChildren().addAll(hdr, noSnippet);
+            return section;
+        }
 
         TextArea code = new TextArea(f.getCodeSnippet());
         code.setEditable(false);
