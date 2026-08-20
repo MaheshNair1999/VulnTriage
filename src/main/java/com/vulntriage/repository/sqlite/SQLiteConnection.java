@@ -184,6 +184,16 @@ public class SQLiteConnection {
                 )
             """);
 
+            stmt.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS final_reviews (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    finding_id  INTEGER NOT NULL UNIQUE REFERENCES findings(id),
+                    verdict     TEXT    NOT NULL,
+                    notes       TEXT,
+                    reviewed_at TEXT    NOT NULL
+                )
+            """);
+
             log.info("Database schema initialised successfully");
         }
         migrateSchema();
@@ -256,6 +266,22 @@ public class SQLiteConnection {
             if (!hasCvssScore) {
                 stmt.executeUpdate("ALTER TABLE findings ADD COLUMN cvss_score REAL");
                 log.info("Schema migration: added 'cvss_score' column to findings table");
+            }
+
+            // Migration: create final_reviews table for existing DBs
+            boolean hasFinalReviews = connection.getMetaData()
+                .getTables(null, null, "final_reviews", null).next();
+            if (!hasFinalReviews) {
+                stmt.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS final_reviews (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        finding_id  INTEGER NOT NULL UNIQUE REFERENCES findings(id),
+                        verdict     TEXT    NOT NULL,
+                        notes       TEXT,
+                        reviewed_at TEXT    NOT NULL
+                    )
+                """);
+                log.info("Schema migration: created final_reviews table");
             }
         } catch (SQLException e) {
             log.warn("Schema migration check failed (non-fatal): {}", e.getMessage());

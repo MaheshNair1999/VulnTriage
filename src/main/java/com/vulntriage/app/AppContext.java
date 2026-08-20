@@ -6,8 +6,10 @@ import com.vulntriage.config.ThemeColors;
 import com.vulntriage.repository.CachingFindingRepository;
 import com.vulntriage.repository.api.WorkflowRepository;
 import com.vulntriage.repository.api.PromptTemplateRepository;
+import com.vulntriage.repository.api.FinalReviewRepository;
 import com.vulntriage.repository.sqlite.SQLiteWorkflowRepository;
 import com.vulntriage.repository.sqlite.SQLitePromptTemplateRepository;
+import com.vulntriage.repository.sqlite.SQLiteFinalReviewRepository;
 import com.vulntriage.repository.api.*;
 import com.vulntriage.repository.sqlite.*;
 import com.vulntriage.triage.api.TriageStrategy;
@@ -40,6 +42,7 @@ public class AppContext {
     private final EvaluationRepository     evalRepo;
     private final WorkflowRepository       workflowRepo;
     private final PromptTemplateRepository promptTemplateRepo;
+    private final FinalReviewRepository    finalReviewRepo;
 
     // ── Services ───────────────────────────────────────────────────────────
     private TriageStrategy triageStrategy;
@@ -57,6 +60,7 @@ public class AppContext {
         evalRepo           = new SQLiteEvaluationRepository();
         workflowRepo       = new SQLiteWorkflowRepository();
         promptTemplateRepo = new SQLitePromptTemplateRepository();
+        finalReviewRepo    = new SQLiteFinalReviewRepository();
         triageStrategy = new MockTriageStrategy(); // safe default — switch to Ollama in Settings
 
         // Load persisted settings
@@ -100,6 +104,7 @@ public class AppContext {
     public EvaluationRepository     evalRepo()           { return evalRepo; }
     public WorkflowRepository       workflowRepo()       { return workflowRepo; }
     public PromptTemplateRepository promptTemplateRepo() { return promptTemplateRepo; }
+    public FinalReviewRepository    finalReviewRepo()    { return finalReviewRepo; }
 
     // ── Triage strategy ────────────────────────────────────────────────────
 

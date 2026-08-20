@@ -4,6 +4,7 @@ import com.vulntriage.app.Main;
 import com.vulntriage.config.ThemeColors;
 import com.vulntriage.ui.dashboard.DashboardView;
 import com.vulntriage.ui.evaluation.EvaluationView;
+import com.vulntriage.ui.finalreview.FinalReviewView;
 import com.vulntriage.ui.workflow.WorkflowView;
 import com.vulntriage.ui.review.ReviewView;
 import com.vulntriage.ui.settings.SettingsView;
@@ -148,6 +149,7 @@ public class MainWindow {
             {"⊚", "Triage Results"},
             {"⬡", "Workflows"},
             {"≡", "Evaluate"},
+            {"⊛", "Case Review"},
             {"⚙", "Settings"}
         };
 
@@ -169,7 +171,7 @@ public class MainWindow {
         VBox workflowIndicator = buildWorkflowIndicator();
         VBox scanIndicator     = buildScanIndicator();
 
-        Label version = new Label("v1.0.0  ·  Java 17  ·  SQLite");
+        Label version = new Label("v1.0.0  ·  Java 21  ·  SQLite");
         version.setPadding(new Insets(4, 20, 16, 20));
         version.setStyle("-fx-font-size: 9px; -fx-text-fill: " + ThemeColors.DIM + ";");
 
@@ -211,7 +213,7 @@ public class MainWindow {
     // ── Navigation ─────────────────────────────────────────────────────────
 
     private static final java.util.Set<String> NO_CACHE =
-        java.util.Set.of("Dashboard", "Findings", "Review", "Evaluate");
+        java.util.Set.of("Dashboard", "Findings", "Review", "Evaluate", "Case Review");
 
     private Node triageViewNode;
 
@@ -258,6 +260,7 @@ public class MainWindow {
             case "Triage Results" -> new TriageView().build();
             case "Workflows"      -> new WorkflowView().build();
             case "Evaluate"       -> new EvaluationView().build();
+            case "Case Review"    -> new FinalReviewView().build();
             case "Prompts"        -> new PromptsView().build();
             case "Settings"       -> new SettingsView().build();
             default               -> buildPlaceholder(name);
