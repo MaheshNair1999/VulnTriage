@@ -15,6 +15,8 @@ import javafx.scene.input.KeyCode;
 
 import java.util.List;
 import java.util.Optional;
+import java.io.File;
+import java.nio.file.Files;
 import static com.vulntriage.config.ThemeColors.*;
 
 public class FinalReviewView {
@@ -313,21 +315,115 @@ public class FinalReviewView {
     // ── Code snippet ───────────────────────────────────────────────────────
 
     private VBox buildCodeSection(Finding f) {
-        VBox section = new VBox(6);
+        VBox section = new VBox(4);
         section.setPadding(new Insets(16, 28, 0, 28));
 
         if (f.getCodeSnippet() == null || f.getCodeSnippet().isBlank()) return section;
 
+        HBox hdr = new HBox(10);
+        hdr.setAlignment(Pos.CENTER_LEFT);
         Label lbl = sectionLabel("CODE SNIPPET");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        Label hint = new Label("double-click to view full file");
+        hint.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
+        hdr.getChildren().addAll(lbl, spacer, hint);
+
         TextArea code = new TextArea(f.getCodeSnippet());
         code.setEditable(false);
         code.setWrapText(false);
         code.setPrefRowCount(Math.min(12, f.getCodeSnippet().split("\n").length + 1));
         code.getStyleClass().add("code-snippet");
         code.setStyle("-fx-font-family: '" + MONO + "'; -fx-font-size: 12px;");
+        code.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2 && e.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+                showFullFileDialog(f);
+            }
+        });
 
-        section.getChildren().addAll(lbl, code);
+        section.getChildren().addAll(hdr, code);
         return section;
+    }
+
+    private void showFullFileDialog(Finding f) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("File Viewer");
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().setPrefSize(900, 680);
+        com.vulntriage.ui.UIUtils.applyTheme(dialog);
+
+        // Try to read the full file; fall back to the snippet
+        String fullContent = null;
+        String filePath = f.getFilePath();
+        java.io.File file = new java.io.File(filePath);
+        if (file.exists() && file.isFile()) {
+            try {
+                fullContent = java.nio.file.Files.readString(file.toPath());
+            } catch (Exception ignored) {}
+        }
+
+        String content = fullContent != null ? fullContent : f.getCodeSnippet();
+        boolean isFullFile = fullContent != null;
+
+        VBox wrapper = new VBox(8);
+        wrapper.setPadding(new Insets(12));
+        wrapper.setStyle("-fx-background-color: " + BG + ";");
+
+        Label titleLabel = new Label(isFullFile ? filePath : "Snippet only — file not found on disk");
+        titleLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + (isFullFile ? MUTED : AMBER)
+            + "; -fx-font-family: '" + MONO + "';");
+        titleLabel.setWrapText(true);
+
+        if (f.getLineNumber() != null && isFullFile) {
+            Label lineHint = new Label("Flagged line: " + f.getLineNumber());
+            lineHint.setStyle("-fx-font-size: 11px; -fx-text-fill: " + BLUE + ";");
+            wrapper.getChildren().addAll(titleLabel, lineHint);
+        } else {
+            wrapper.getChildren().add(titleLabel);
+        }
+
+        TextArea area = new TextArea(addLineNumbers(content));
+        area.setEditable(false);
+        area.setWrapText(false);
+        area.getStyleClass().add("code-snippet");
+        area.setStyle("-fx-font-family: '" + MONO + "'; -fx-font-size: 12px;");
+        VBox.setVgrow(area, Priority.ALWAYS);
+        wrapper.getChildren().add(area);
+        VBox.setVgrow(wrapper, Priority.ALWAYS);
+
+        dialog.getDialogPane().setContent(wrapper);
+
+        // Scroll to flagged line after dialog opens
+        if (f.getLineNumber() != null && isFullFile) {
+            int targetLine = f.getLineNumber();
+            dialog.setOnShown(e -> javafx.application.Platform.runLater(() -> {
+                String[] lines = content.split("\n");
+                int total = lines.length;
+                if (total > 0 && targetLine > 0) {
+                    // Position caret at the flagged line, which also scrolls the viewport
+                    int charPos = 0;
+                    for (int i = 0; i < Math.min(targetLine - 1, lines.length); i++) {
+                        charPos += lines[i].length() + 1 + String.valueOf(i + 1).length() + 2;
+                    }
+                    area.positionCaret(Math.min(charPos, area.getText().length()));
+                    area.requestFocus();
+                }
+            }));
+        }
+
+        com.vulntriage.ui.UIUtils.fixCodeSnippetBackground(dialog, area);
+        dialog.showAndWait();
+    }
+
+    private String addLineNumbers(String content) {
+        if (content == null) return "";
+        String[] lines = content.split("\n");
+        int width = String.valueOf(lines.length).length();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            sb.append(String.format("%" + width + "d  %s%n", i + 1, lines[i]));
+        }
+        return sb.toString();
     }
 
     // ── LLM analysis ───────────────────────────────────────────────────────
