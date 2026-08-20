@@ -166,7 +166,7 @@ public class FinalReviewView {
     private void rebuildCaseList() {
         caseList.getChildren().clear();
         if (cases.isEmpty()) {
-            Label empty = new Label("No qualifying cases.\n\nCases appear here when a finding\nhas manual verdict TP and at least\n1 LLM version also triaged it TP.");
+            Label empty = new Label("No qualifying cases.\n\nCases appear here when a finding\nhas been manually reviewed as TP.");
             empty.setStyle("-fx-font-size: 12px; -fx-text-fill: " + MUTED + ";");
             empty.setPadding(new Insets(24, 14, 0, 14));
             empty.setWrapText(true);

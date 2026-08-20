@@ -95,11 +95,6 @@ public class SQLiteFinalReviewRepository implements FinalReviewRepository {
             SELECT f.* FROM findings f
             JOIN manual_reviews mr ON mr.finding_id = f.id
             WHERE mr.verdict = 'TP'
-            AND (
-                SELECT COUNT(DISTINCT lr.prompt_version)
-                FROM llm_results lr
-                WHERE lr.finding_id = f.id AND lr.llm_verdict = 'TP'
-            ) >= 1
             ORDER BY f.severity, f.rule_id
             """;
         List<Finding> list = new ArrayList<>();
