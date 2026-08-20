@@ -29,6 +29,7 @@ public class FinalReviewView {
     private int            selectedIndex = 0;
 
     private VBox           caseList;
+    private ScrollPane     caseListScroll;
     private Label          headerCountLabel;
     private Label          progressLabel;
     private ProgressBar    progressBar;
@@ -93,7 +94,7 @@ public class FinalReviewView {
         Label title = new Label("Case Review");
         title.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
         Label sub = new Label(
-            "F = Fixed   W = Won't Fix   D = Defer   ↑↓ = Navigate");
+            "F = Fixed   W = Won't Fix   D = Defer   ↑ / ↓ = Previous / Next case");
         sub.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED
             + "; -fx-font-family: '" + MONO + "';");
         titleBlock.getChildren().addAll(title, sub);
@@ -145,13 +146,19 @@ public class FinalReviewView {
 
         caseList = new VBox(0);
 
-        ScrollPane scroll = new ScrollPane(caseList);
-        scroll.setFitToWidth(true);
-        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        VBox.setVgrow(scroll, Priority.ALWAYS);
+        caseListScroll = new ScrollPane(caseList);
+        caseListScroll.setFitToWidth(true);
+        caseListScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        caseListScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        VBox.setVgrow(caseListScroll, Priority.ALWAYS);
 
-        panel.getChildren().addAll(progressBar, listHeader, scroll);
+        // Intercept UP/DOWN on the scroll pane so they navigate cases, not scroll content
+        caseListScroll.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
+            if (e.getCode() == KeyCode.UP)   { movePrev(); e.consume(); }
+            if (e.getCode() == KeyCode.DOWN)  { moveNext(); e.consume(); }
+        });
+
+        panel.getChildren().addAll(progressBar, listHeader, caseListScroll);
         rebuildCaseList();
         return panel;
     }
@@ -244,6 +251,12 @@ public class FinalReviewView {
         ScrollPane scroll = new ScrollPane(detailRoot);
         scroll.setFitToWidth(true);
         scroll.setStyle("-fx-background-color: transparent; -fx-background: " + BG + ";");
+
+        // Pass UP/DOWN through to navigate cases rather than scroll content
+        scroll.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
+            if (e.getCode() == KeyCode.UP)   { movePrev(); e.consume(); }
+            if (e.getCode() == KeyCode.DOWN)  { moveNext(); e.consume(); }
+        });
 
         StackPane wrapper = new StackPane(emptyLabel, scroll);
         wrapper.setStyle("-fx-background-color: " + BG + ";");
