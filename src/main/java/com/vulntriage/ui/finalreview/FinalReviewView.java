@@ -214,7 +214,16 @@ public class FinalReviewView {
 
         Label statusChip = verdictChip(existing.map(FinalReview::getVerdict).orElse(null));
 
-        row.getChildren().addAll(text, statusChip);
+        VBox chips = new VBox(3);
+        chips.setAlignment(Pos.CENTER_RIGHT);
+        chips.getChildren().add(statusChip);
+        if (ctx.finalReviewRepo().isFlagged(f.getId())) {
+            Label flagChip = new Label("⚑");
+            flagChip.setStyle("-fx-font-size: 12px; -fx-text-fill: " + AMBER + ";");
+            chips.getChildren().add(flagChip);
+        }
+
+        row.getChildren().addAll(text, chips);
         return row;
     }
 
@@ -536,11 +545,28 @@ public class FinalReviewView {
         HBox btnRow = new HBox(12, fixedBtn, wontFixBtn, deferBtn);
         btnRow.setAlignment(Pos.CENTER_LEFT);
 
+        // Clear verdict button
+        Button clearBtn = new Button("✕  Clear Verdict");
+        clearBtn.setStyle("-fx-background-color: " + NEUTRAL_BG + "; -fx-text-fill: " + MUTED + "; "
+            + "-fx-background-radius: 8; -fx-padding: 7 16; -fx-font-size: 12px; -fx-cursor: hand; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 8;");
+        clearBtn.setOnMouseEntered(e -> clearBtn.setOpacity(0.8));
+        clearBtn.setOnMouseExited (e -> clearBtn.setOpacity(1.0));
+        clearBtn.setOnAction(e -> clearVerdict(f));
+        clearBtn.setDisable(existing.isEmpty());
+
+        // Flag toggle button
+        boolean flagged = ctx.finalReviewRepo().isFlagged(f.getId());
+        Button flagBtn = flagButton(f, flagged);
+
+        HBox utilRow = new HBox(10, clearBtn, flagBtn);
+        utilRow.setAlignment(Pos.CENTER_LEFT);
+
         Separator sep = new Separator();
         sep.setStyle("-fx-background-color: " + BORDER + ";");
         sep.setPadding(new Insets(8, 0, 0, 0));
 
-        section.getChildren().addAll(sep, lbl, currentVerdictLabel, notesLbl, notesField, btnRow);
+        section.getChildren().addAll(sep, lbl, currentVerdictLabel, notesLbl, notesField, btnRow, utilRow);
         return section;
     }
 
@@ -568,6 +594,43 @@ public class FinalReviewView {
         // Auto-advance to next unreviewed
         int next = findNextPending(selectedIndex);
         if (next >= 0) showCase(next);
+    }
+
+    private void clearVerdict(Finding f) {
+        ctx.finalReviewRepo().deleteByFindingId(f.getId());
+        updateCurrentVerdictLabel(null);
+        rebuildCaseList();
+        updateProgress();
+        showCase(selectedIndex);
+    }
+
+    private Button flagButton(Finding f, boolean currentlyFlagged) {
+        Button btn = new Button(currentlyFlagged ? "⚑  Flagged" : "⚐  Flag");
+        String activeBg    = AMBER_BG;
+        String activeFg    = AMBER_DIM;
+        String inactiveBg  = NEUTRAL_BG;
+        String inactiveFg  = MUTED;
+        btn.setStyle(flagBtnStyle(currentlyFlagged, activeBg, activeFg, inactiveBg, inactiveFg));
+        btn.setOnMouseEntered(e -> btn.setOpacity(0.8));
+        btn.setOnMouseExited (e -> btn.setOpacity(1.0));
+        btn.setOnAction(e -> {
+            boolean nowFlagged = !ctx.finalReviewRepo().isFlagged(f.getId());
+            ctx.finalReviewRepo().setFlagged(f.getId(), nowFlagged);
+            btn.setText(nowFlagged ? "⚑  Flagged" : "⚐  Flag");
+            btn.setStyle(flagBtnStyle(nowFlagged, activeBg, activeFg, inactiveBg, inactiveFg));
+            rebuildCaseList();
+        });
+        return btn;
+    }
+
+    private String flagBtnStyle(boolean active, String activeBg, String activeFg,
+                                 String inactiveBg, String inactiveFg) {
+        String bg = active ? activeBg  : inactiveBg;
+        String fg = active ? activeFg  : inactiveFg;
+        String border = active ? AMBER_DIM : BORDER;
+        return "-fx-background-color: " + bg + "; -fx-text-fill: " + fg + "; "
+            + "-fx-background-radius: 8; -fx-padding: 7 16; -fx-font-size: 12px; -fx-cursor: hand; "
+            + "-fx-border-color: " + border + "; -fx-border-radius: 8;";
     }
 
     private int findNextPending(int from) {

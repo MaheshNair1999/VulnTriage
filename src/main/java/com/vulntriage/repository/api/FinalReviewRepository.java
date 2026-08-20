@@ -18,6 +18,10 @@ public interface FinalReviewRepository {
 
     void deleteByFindingId(long findingId);
 
-    /** All findings where manual verdict = TP and >= 2 distinct LLM prompt versions also said TP. */
+    boolean isFlagged(long findingId);
+
+    void setFlagged(long findingId, boolean flagged);
+
+    /** All findings where manual verdict = TP. */
     List<Finding> findQualifyingFindings();
 }

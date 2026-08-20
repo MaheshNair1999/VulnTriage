@@ -90,6 +90,38 @@ public class SQLiteFinalReviewRepository implements FinalReviewRepository {
     }
 
     @Override
+    public boolean isFlagged(long findingId) {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT 1 FROM case_flags WHERE finding_id = ?")) {
+            ps.setLong(1, findingId);
+            try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to check flag", e);
+        }
+    }
+
+    @Override
+    public void setFlagged(long findingId, boolean flagged) {
+        try {
+            if (flagged) {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "INSERT OR IGNORE INTO case_flags (finding_id) VALUES (?)")) {
+                    ps.setLong(1, findingId);
+                    ps.executeUpdate();
+                }
+            } else {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "DELETE FROM case_flags WHERE finding_id = ?")) {
+                    ps.setLong(1, findingId);
+                    ps.executeUpdate();
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to set flag", e);
+        }
+    }
+
+    @Override
     public List<Finding> findQualifyingFindings() {
         String sql = """
             SELECT f.* FROM findings f

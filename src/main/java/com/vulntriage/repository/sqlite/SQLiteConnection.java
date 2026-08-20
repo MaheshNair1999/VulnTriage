@@ -194,6 +194,12 @@ public class SQLiteConnection {
                 )
             """);
 
+            stmt.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS case_flags (
+                    finding_id INTEGER NOT NULL UNIQUE REFERENCES findings(id)
+                )
+            """);
+
             log.info("Database schema initialised successfully");
         }
         migrateSchema();
@@ -282,6 +288,18 @@ public class SQLiteConnection {
                     )
                 """);
                 log.info("Schema migration: created final_reviews table");
+            }
+
+            // Migration: create case_flags table for existing DBs
+            boolean hasCaseFlags = connection.getMetaData()
+                .getTables(null, null, "case_flags", null).next();
+            if (!hasCaseFlags) {
+                stmt.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS case_flags (
+                        finding_id INTEGER NOT NULL UNIQUE REFERENCES findings(id)
+                    )
+                """);
+                log.info("Schema migration: created case_flags table");
             }
         } catch (SQLException e) {
             log.warn("Schema migration check failed (non-fatal): {}", e.getMessage());
