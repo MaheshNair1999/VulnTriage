@@ -99,7 +99,7 @@ public class SQLiteFinalReviewRepository implements FinalReviewRepository {
                 SELECT COUNT(DISTINCT lr.prompt_version)
                 FROM llm_results lr
                 WHERE lr.finding_id = f.id AND lr.llm_verdict = 'TP'
-            ) >= 2
+            ) >= 1
             ORDER BY f.severity, f.rule_id
             """;
         List<Finding> list = new ArrayList<>();
