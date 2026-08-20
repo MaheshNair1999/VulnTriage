@@ -11,6 +11,8 @@ import com.vulntriage.repository.sqlite.SQLitePromptTemplateRepository;
 import com.vulntriage.repository.api.*;
 import com.vulntriage.repository.sqlite.*;
 import com.vulntriage.triage.api.TriageStrategy;
+import com.vulntriage.triage.cloud.CloudTriageStrategy;
+import com.vulntriage.triage.cloud.LlmProvider;
 import com.vulntriage.triage.mock.MockTriageStrategy;
 import com.vulntriage.triage.ollama.OllamaTriageStrategy;
 
@@ -67,9 +69,15 @@ public class AppContext {
         ThemeColors.apply(dark);
         darkMode.set(dark);
 
-        // Auto-enable Ollama if settings were previously saved
-        // Without this, triageStrategy stays as Mock even after app restart
-        this.triageStrategy = new OllamaTriageStrategy(ollamaUrl, ollamaModel);
+        // Restore the previously saved provider (Ollama or cloud) on startup
+        LlmProvider savedProvider = cfg.getActiveProvider();
+        if (savedProvider == LlmProvider.OLLAMA) {
+            this.triageStrategy = new OllamaTriageStrategy(ollamaUrl, ollamaModel);
+        } else {
+            String apiKey = cfg.getLlmApiKey();
+            String model  = cfg.getLlmModel();
+            this.triageStrategy = new CloudTriageStrategy(savedProvider, apiKey, model);
+        }
     }
 
     public static synchronized AppContext getInstance() {
@@ -104,6 +112,12 @@ public class AppContext {
         this.ollamaModel = model;
         this.triageStrategy = new OllamaTriageStrategy(cleanUrl, model);
         AppConfig.getInstance().saveOllamaSettings(cleanUrl, model);
+    }
+
+    /** Switch to a cloud LLM provider (OpenAI, Anthropic, Gemini, DeepSeek) */
+    public void enableCloudProvider(LlmProvider provider, String apiKey, String model) {
+        this.triageStrategy = new CloudTriageStrategy(provider, apiKey, model);
+        AppConfig.getInstance().saveCloudProviderSettings(provider, apiKey, model);
     }
 
     /** Switch back to mock — useful during development/testing */

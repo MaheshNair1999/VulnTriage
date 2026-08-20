@@ -1,6 +1,7 @@
 package com.vulntriage.config;
 
 import com.vulntriage.repository.sqlite.SQLiteConnection;
+import com.vulntriage.triage.cloud.LlmProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +23,9 @@ public class AppConfig {
     public static final String OLLAMA_MODEL  = "ollama.model";
     public static final String TRIAGE_DELAY  = "triage.delay_ms";
     public static final String DARK_MODE     = "app.dark_mode";
+    public static final String LLM_PROVIDER  = "llm.provider";
+    public static final String LLM_API_KEY   = "llm.api_key";
+    public static final String LLM_MODEL     = "llm.model";
 
     private static final String DEFAULT_OLLAMA_URL   = "http://localhost:11434";
     private static final String DEFAULT_OLLAMA_MODEL = "qwen2.5:3b";
@@ -74,7 +78,22 @@ public class AppConfig {
     public void saveOllamaSettings(String url, String model) {
         set(OLLAMA_URL,   url);
         set(OLLAMA_MODEL, model);
+        set(LLM_PROVIDER, LlmProvider.OLLAMA.name());
         log.info("Saved Ollama settings: url={}, model={}", url, model);
+    }
+
+    public LlmProvider getActiveProvider() {
+        return LlmProvider.fromKey(get(LLM_PROVIDER, LlmProvider.OLLAMA.name()));
+    }
+
+    public String getLlmApiKey()  { return get(LLM_API_KEY, ""); }
+    public String getLlmModel()   { return get(LLM_MODEL,   ""); }
+
+    public void saveCloudProviderSettings(LlmProvider provider, String apiKey, String model) {
+        set(LLM_PROVIDER, provider.name());
+        set(LLM_API_KEY,  apiKey);
+        set(LLM_MODEL,    model);
+        log.info("Saved cloud provider settings: provider={}, model={}", provider, model);
     }
 
     public void saveTriageDelay(int delayMs) {

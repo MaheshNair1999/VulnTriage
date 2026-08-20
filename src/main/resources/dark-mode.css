@@ -49,9 +49,12 @@
     -fx-background-color: #1D4ED8;
 }
 
-.table-row-cell:focused,
 .table-row-cell:selected:focused {
     -fx-background-color: #1D4ED8;
+}
+
+.table-row-cell:focused:not(:selected) {
+    -fx-background-color: #2A3A50;
 }
 
 .table-cell {
@@ -266,6 +269,10 @@
 }
 
 .check-box .mark {
+    -fx-background-color: transparent;
+}
+
+.check-box:selected .mark {
     -fx-background-color: white;
 }
 

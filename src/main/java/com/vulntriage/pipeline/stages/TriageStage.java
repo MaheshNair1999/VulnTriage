@@ -11,7 +11,6 @@ import com.vulntriage.repository.api.EvaluationRepository;
 import com.vulntriage.repository.api.LlmResultRepository;
 import com.vulntriage.triage.api.TriageResult;
 import com.vulntriage.triage.api.TriageStrategy;
-import com.vulntriage.triage.ollama.OllamaTriageStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,7 +96,7 @@ public class TriageStage extends AbstractPipelineStage {
 
         if (!strategy.isAvailable()) {
             ctx.fail("LLM backend (" + strategy.getModelName()
-                + ") is not available. Is Ollama running?");
+                + ") is not available. Check your provider settings.");
             return;
         }
 
@@ -113,15 +112,13 @@ public class TriageStage extends AbstractPipelineStage {
         log.info("TriageStage: processing {} findings with {}",
             sample.size(), strategy.getModelName());
 
-        boolean useTemplate = promptTemplateStr != null && !promptTemplateStr.isBlank()
-            && strategy instanceof OllamaTriageStrategy;
+        boolean useTemplate = promptTemplateStr != null && !promptTemplateStr.isBlank();
 
         int processed = 0;
         for (Finding finding : sample) {
             try {
                 TriageResult result = useTemplate
-                    ? ((OllamaTriageStrategy) strategy).triageWithTemplate(
-                        finding, promptTemplateStr, promptVersion, null)
+                    ? strategy.triageWithTemplate(finding, promptTemplateStr, promptVersion, null)
                     : strategy.triage(finding);
 
                 LlmResult llmResult = new LlmResult();

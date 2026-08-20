@@ -67,6 +67,7 @@ public class SQLiteConnection {
                     name         TEXT    NOT NULL,
                     local_path   TEXT    NOT NULL,
                     url          TEXT,
+                    version      TEXT,
                     created_at   TEXT    NOT NULL,
                     last_scanned TEXT
                 )
@@ -230,6 +231,15 @@ public class SQLiteConnection {
             if (!hasHidden) {
                 stmt.executeUpdate("ALTER TABLE repositories ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
                 log.info("Schema migration: added 'hidden' column to repositories table");
+            }
+
+            // Migration: add version column for GitHub-cloned repos
+            boolean hasVersion = connection.getMetaData()
+                .getColumns(null, null, "repositories", "version")
+                .next();
+            if (!hasVersion) {
+                stmt.executeUpdate("ALTER TABLE repositories ADD COLUMN version TEXT");
+                log.info("Schema migration: added 'version' column to repositories table");
             }
 
             // Migration: add CVSS v3.1 fields to findings (added for CVSS calculator feature)

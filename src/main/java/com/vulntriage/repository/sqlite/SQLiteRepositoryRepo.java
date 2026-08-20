@@ -19,12 +19,13 @@ public class SQLiteRepositoryRepo implements RepositoryRepo {
 
     @Override
     public void save(Repository r) {
-        String sql = "INSERT INTO repositories (name, local_path, url, created_at) VALUES (?,?,?,?)";
+        String sql = "INSERT INTO repositories (name, local_path, url, version, created_at) VALUES (?,?,?,?,?)";
         try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, r.getName());
             ps.setString(2, r.getLocalPath());
             ps.setString(3, r.getUrl());
-            ps.setString(4, LocalDateTime.now().toString());
+            ps.setString(4, r.getVersion());
+            ps.setString(5, LocalDateTime.now().toString());
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 if (keys.next()) r.setId(keys.getLong(1));
@@ -63,13 +64,14 @@ public class SQLiteRepositoryRepo implements RepositoryRepo {
 
     @Override
     public void update(Repository r) {
-        String sql = "UPDATE repositories SET name=?, local_path=?, url=?, last_scanned=? WHERE id=?";
+        String sql = "UPDATE repositories SET name=?, local_path=?, url=?, version=?, last_scanned=? WHERE id=?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, r.getName());
             ps.setString(2, r.getLocalPath());
             ps.setString(3, r.getUrl());
-            ps.setString(4, r.getLastScanned() != null ? r.getLastScanned().toString() : null);
-            ps.setLong  (5, r.getId());
+            ps.setString(4, r.getVersion());
+            ps.setString(5, r.getLastScanned() != null ? r.getLastScanned().toString() : null);
+            ps.setLong  (6, r.getId());
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException("Failed to update repository id=" + r.getId(), e);
@@ -104,6 +106,7 @@ public class SQLiteRepositoryRepo implements RepositoryRepo {
         r.setName     (rs.getString("name"));
         r.setLocalPath(rs.getString("local_path"));
         r.setUrl      (rs.getString("url"));
+        r.setVersion  (rs.getString("version"));
         String ca = rs.getString("created_at");
         if (ca != null) r.setCreatedAt(LocalDateTime.parse(ca));
         String ls = rs.getString("last_scanned");

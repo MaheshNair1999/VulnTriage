@@ -1,3 +1,15 @@
+/* ── Code snippet TextArea — always dark regardless of light/dark mode ──────── */
+.code-snippet {
+    -fx-background-color: #070B14;
+    -fx-control-inner-background: #070B14;
+    -fx-border-color: #313244;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+.code-snippet .content {
+    -fx-background-color: #070B14;
+}
+
 /* ── Column + row separator lines for all TableViews (light mode base) ────── */
 .table-cell {
     -fx-border-color: transparent #D1D5DB #E5E7EB transparent;

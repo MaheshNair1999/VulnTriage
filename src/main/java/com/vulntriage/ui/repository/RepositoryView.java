@@ -31,6 +31,10 @@ import javafx.stage.Window;
 import com.vulntriage.scanner.ParallelScanCoordinator;
 
 import java.io.File;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 import java.time.format.DateTimeFormatter;
@@ -40,6 +44,10 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import static com.vulntriage.config.ThemeColors.*;
 
 /**
@@ -94,14 +102,19 @@ public class RepositoryView {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button addBtn = primaryBtn("＋  Add Repository");
+        Button addBtn   = primaryBtn("＋  Add Repository");
+        Button cloneBtn = secondaryBtn("⬇  Clone from GitHub");
         scanBtn = secondaryBtn("▶  Scan Selected");
         stopBtn = dangerBtn("■  Stop Scan");
         stopBtn.setVisible(false);
         stopBtn.setManaged(false);
         Button delBtn = dangerBtn("✕  Remove");
 
-        addBtn.setOnAction(e  -> showAddDialog());
+        addBtn.setOnAction(e   -> showAddDialog());
+        cloneBtn.setOnAction(e -> {
+            CloneRequest req = showGitHubCloneDialog();
+            if (req != null) executeGitClone(req);
+        });
         scanBtn.setOnAction(e -> scanSelected());
         delBtn.setOnAction(e  -> removeSelected());
         stopBtn.setOnAction(e -> {
@@ -112,7 +125,7 @@ public class RepositoryView {
             setStatus("Stopping scan…");
         });
 
-        bar.getChildren().addAll(titleBlock, spacer, delBtn, scanBtn, stopBtn, addBtn);
+        bar.getChildren().addAll(titleBlock, spacer, delBtn, scanBtn, stopBtn, cloneBtn, addBtn);
         return bar;
     }
 
@@ -133,10 +146,11 @@ public class RepositoryView {
         VBox.setVgrow(table, Priority.ALWAYS);
 
         TableColumn<RepositoryRow, String> nameCol = col("Name",         180, r -> new javafx.beans.property.ReadOnlyStringWrapper(r.getValue().getName()));
-        TableColumn<RepositoryRow, String> pathCol = col("Local Path",   300, r -> new javafx.beans.property.ReadOnlyStringWrapper(r.getValue().getLocalPath()));
-        TableColumn<RepositoryRow, String> scanCol = col("Last Scanned", 160, r -> new javafx.beans.property.ReadOnlyStringWrapper(r.getValue().getLastScanned()));
+        TableColumn<RepositoryRow, String> pathCol = col("Local Path",   280, r -> new javafx.beans.property.ReadOnlyStringWrapper(r.getValue().getLocalPath()));
+        TableColumn<RepositoryRow, String> verCol  = col("Version",      110, r -> new javafx.beans.property.ReadOnlyStringWrapper(r.getValue().getVersion()));
+        TableColumn<RepositoryRow, String> scanCol = col("Last Scanned", 150, r -> new javafx.beans.property.ReadOnlyStringWrapper(r.getValue().getLastScanned()));
         TableColumn<RepositoryRow, String> cntCol  = col("Findings",      80, r -> new javafx.beans.property.ReadOnlyStringWrapper(r.getValue().getFindingCount()));
-        table.getColumns().addAll(nameCol, pathCol, scanCol, cntCol);
+        table.getColumns().addAll(nameCol, pathCol, verCol, scanCol, cntCol);
 
         table.setOnKeyPressed(event -> {
             if (event.getCode() == javafx.scene.input.KeyCode.DELETE
@@ -240,6 +254,8 @@ public class RepositoryView {
         boolean semgrep, boolean trivy, boolean gitleaks, boolean codeql, boolean sonarqube,
         String sonarUrl, String sonarToken
     ) {}
+
+    private record CloneRequest(String url, String version, String name, String clonePath) {}
 
     private ScannerChoice showScannerPicker() {
         Dialog<ScannerChoice> dialog = new Dialog<>();
@@ -563,6 +579,235 @@ public class RepositoryView {
         });
     }
 
+    // ── GitHub clone ────────────────────────────────────────────────────────
+
+    private CloneRequest showGitHubCloneDialog() {
+        Dialog<CloneRequest> dialog = new Dialog<>();
+        dialog.setTitle("Clone from GitHub");
+        UIUtils.applyTheme(dialog);
+        dialog.setHeaderText("Clone a GitHub repository and register it for scanning.");
+
+        ButtonType cloneType = new ButtonType("Clone", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(cloneType, ButtonType.CANCEL);
+
+        TextField urlField = new TextField();
+        urlField.setPromptText("https://github.com/owner/repo");
+
+        ComboBox<String> versionBox = new ComboBox<>();
+        versionBox.setEditable(true);
+        versionBox.getItems().add("latest (default branch)");
+        versionBox.setValue("latest (default branch)");
+        versionBox.setPrefWidth(260);
+
+        Button fetchBtn = new Button("Fetch Tags");
+        fetchBtn.setStyle("-fx-background-color: " + BTN_BG_SECONDARY + "; -fx-text-fill: " + ACCENT + "; "
+            + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 6 12; "
+            + "-fx-border-color: " + BTN_BORDER_SECONDARY + "; -fx-border-radius: 6px;");
+
+        HBox versionRow = new HBox(8, versionBox, fetchBtn);
+        HBox.setHgrow(versionBox, Priority.ALWAYS);
+
+        TextField nameField = new TextField();
+        nameField.setPromptText("e.g. django-cms");
+
+        String defaultBase = System.getProperty("user.home")
+            + File.separator + "Desktop" + File.separator + "CyberSecurity" + File.separator + "repos";
+        TextField pathField = new TextField();
+        pathField.setPromptText("Select a folder or paste a path");
+
+        Button browseBtn = new Button("Browse…");
+        browseBtn.setOnAction(e -> {
+            DirectoryChooser dc = new DirectoryChooser();
+            dc.setTitle("Choose Clone Destination");
+            File sel = dc.showDialog(dialog.getDialogPane().getScene().getWindow());
+            if (sel != null) pathField.setText(sel.getAbsolutePath());
+        });
+
+        HBox pathRow = new HBox(8, pathField, browseBtn);
+        HBox.setHgrow(pathField, Priority.ALWAYS);
+
+        AtomicBoolean nameEdited = new AtomicBoolean(false);
+        AtomicBoolean pathEdited = new AtomicBoolean(false);
+        nameField.setOnKeyTyped(e -> nameEdited.set(true));
+        pathField.setOnKeyTyped(e -> pathEdited.set(true));
+
+        urlField.textProperty().addListener((obs, old, val) -> {
+            String[] ownerRepo = parseGitHubOwnerRepo(val);
+            if (ownerRepo != null) {
+                if (!nameEdited.get()) nameField.setText(ownerRepo[1]);
+                if (!pathEdited.get()) pathField.setText(defaultBase + File.separator + ownerRepo[1]);
+            }
+        });
+
+        fetchBtn.setOnAction(e -> {
+            String[] ownerRepo = parseGitHubOwnerRepo(urlField.getText());
+            if (ownerRepo == null) {
+                showInfo("Enter a valid GitHub URL before fetching tags.");
+                return;
+            }
+            fetchBtn.setDisable(true);
+            versionBox.getItems().setAll("Fetching tags…");
+            versionBox.setValue("Fetching tags…");
+            String owner = ownerRepo[0], repo = ownerRepo[1];
+            Thread t = new Thread(() -> {
+                List<String> tags = fetchGitHubTags(owner, repo);
+                Platform.runLater(() -> {
+                    fetchBtn.setDisable(false);
+                    versionBox.getItems().clear();
+                    versionBox.getItems().add("latest (default branch)");
+                    versionBox.getItems().addAll(tags);
+                    versionBox.setValue("latest (default branch)");
+                    if (tags.isEmpty()) setStatus("No tags found — repo may be untagged.");
+                });
+            }, "github-tags-thread");
+            t.setDaemon(true);
+            t.start();
+        });
+
+        GridPane grid = new GridPane();
+        grid.setHgap(12); grid.setVgap(12);
+        grid.setPadding(new Insets(20, 24, 20, 24));
+        grid.setPrefWidth(520);
+
+        ColumnConstraints labelCol = new ColumnConstraints(110);
+        ColumnConstraints fieldCol = new ColumnConstraints();
+        fieldCol.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(labelCol, fieldCol);
+
+        grid.addRow(0, fieldLabel("GitHub URL"),   urlField);
+        grid.addRow(1, fieldLabel("Version / Tag"), versionRow);
+        grid.addRow(2, fieldLabel("Name"),          nameField);
+        grid.addRow(3, fieldLabel("Clone to"),      pathRow);
+
+        Label hint = new Label("Tip: click 'Fetch Tags' to pick a specific release. Leave as 'latest' to clone the default branch.");
+        hint.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+        hint.setWrapText(true);
+        hint.setMaxWidth(480);
+
+        VBox content = new VBox(12, grid, hint);
+        content.setPadding(new Insets(0, 8, 8, 8));
+        dialog.getDialogPane().setContent(content);
+
+        Node cloneButton = dialog.getDialogPane().lookupButton(cloneType);
+        cloneButton.setDisable(true);
+        Runnable updateCloneBtn = () -> cloneButton.setDisable(
+            urlField.getText().isBlank() || nameField.getText().isBlank() || pathField.getText().isBlank());
+        urlField.textProperty().addListener((o, old, n) -> updateCloneBtn.run());
+        nameField.textProperty().addListener((o, old, n) -> updateCloneBtn.run());
+        pathField.textProperty().addListener((o, old, n) -> updateCloneBtn.run());
+
+        dialog.setResultConverter(btn -> {
+            if (btn != cloneType) return null;
+            String ver = versionBox.getValue();
+            if (ver == null || ver.isBlank() || ver.startsWith("latest")) ver = null;
+            return new CloneRequest(
+                urlField.getText().trim(), ver,
+                nameField.getText().trim(), pathField.getText().trim());
+        });
+
+        return dialog.showAndWait().orElse(null);
+    }
+
+    private void executeGitClone(CloneRequest req) {
+        setStatus("Cloning " + req.name() + "…");
+        progressBar.setVisible(true);
+        table.setDisable(true);
+
+        Task<Repository> cloneTask = new Task<>() {
+            @Override
+            protected Repository call() throws Exception {
+                List<String> cmd = new ArrayList<>();
+                cmd.add("git");
+                cmd.add("clone");
+                if (req.version() != null) {
+                    cmd.add("--branch"); cmd.add(req.version());
+                    cmd.add("--depth"); cmd.add("1");
+                }
+                cmd.add(req.url());
+                cmd.add(req.clonePath());
+
+                updateMessage("Running git clone…");
+                ProcessBuilder pb = new ProcessBuilder(cmd);
+                pb.environment().put("GIT_CLONE_PROTECTION_ACTIVE", "false");
+                pb.redirectErrorStream(true);
+                Process proc = pb.start();
+                String output = new String(proc.getInputStream().readAllBytes());
+                int exitCode = proc.waitFor();
+                if (exitCode != 0) {
+                    throw new RuntimeException("git clone failed:\n" + output.trim());
+                }
+
+                String version = req.version() != null ? req.version() : resolveClonedVersion(req.clonePath());
+                Repository repo = new Repository(req.name(), req.clonePath(), req.url());
+                repo.setVersion(version);
+                return repo;
+            }
+        };
+
+        cloneTask.messageProperty().addListener((o, old, msg) -> Platform.runLater(() -> setStatus(msg)));
+
+        cloneTask.setOnSucceeded(e -> Platform.runLater(() -> {
+            Repository repo = cloneTask.getValue();
+            ctx.repositoryRepo().save(repo);
+            progressBar.setVisible(false);
+            table.setDisable(false);
+            refresh();
+            setStatus("Cloned \"" + repo.getName() + "\" (" + (repo.getVersion() != null ? repo.getVersion() : "latest") + ") successfully.");
+        }));
+
+        cloneTask.setOnFailed(e -> Platform.runLater(() -> {
+            progressBar.setVisible(false);
+            table.setDisable(false);
+            Throwable ex = cloneTask.getException();
+            setStatus("Clone failed.");
+            showError("Clone Failed", ex.getMessage());
+        }));
+
+        Thread t = new Thread(cloneTask, "git-clone-thread");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private List<String> fetchGitHubTags(String owner, String repo) {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create("https://api.github.com/repos/" + owner + "/" + repo + "/tags?per_page=30"))
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "VulnTriage/1.0")
+                .GET().build();
+            HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+            JsonNode root = new ObjectMapper().readTree(resp.body());
+            List<String> tags = new ArrayList<>();
+            if (root.isArray()) {
+                for (JsonNode tag : root) tags.add(tag.get("name").asText());
+            }
+            return tags;
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private String[] parseGitHubOwnerRepo(String url) {
+        if (url == null || url.isBlank()) return null;
+        String s = url.trim().replaceAll("\\.git$", "");
+        Matcher m = Pattern.compile("github\\.com[:/]([^/]+)/([^/\\s]+)$").matcher(s);
+        return m.find() ? new String[]{m.group(1), m.group(2)} : null;
+    }
+
+    private String resolveClonedVersion(String clonePath) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("git", "describe", "--tags", "--abbrev=0");
+            pb.directory(new File(clonePath));
+            pb.redirectErrorStream(true);
+            Process proc = pb.start();
+            String tag = new String(proc.getInputStream().readAllBytes()).trim();
+            return (proc.waitFor() == 0 && !tag.isBlank()) ? tag : "latest";
+        } catch (Exception e) {
+            return "latest";
+        }
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private void refresh() {
@@ -571,9 +816,10 @@ public class RepositoryView {
         ctx.repositoryRepo().findAll().forEach(r -> {
             String lastScanned = r.getLastScanned() != null
                 ? r.getLastScanned().format(fmt) : "Never scanned";
+            String version = r.getVersion() != null ? r.getVersion() : "—";
             long count = ctx.findingRepo().findByRepositoryId(r.getId()).size();
             rows.add(new RepositoryRow(r.getId(), r.getName(),
-                r.getLocalPath(), lastScanned, String.valueOf(count)));
+                r.getLocalPath(), version, lastScanned, String.valueOf(count)));
         });
     }
 
@@ -664,14 +910,16 @@ public class RepositoryView {
         private final long   id;
         private final String name;
         private final String localPath;
+        private final String version;
         private final String lastScanned;
         private final String findingCount;
 
         public RepositoryRow(long id, String name, String localPath,
-                             String lastScanned, String findingCount) {
+                             String version, String lastScanned, String findingCount) {
             this.id           = id;
             this.name         = name;
             this.localPath    = localPath;
+            this.version      = version;
             this.lastScanned  = lastScanned;
             this.findingCount = findingCount;
         }
@@ -679,6 +927,7 @@ public class RepositoryView {
         public long   getId()           { return id; }
         public String getName()         { return name; }
         public String getLocalPath()    { return localPath; }
+        public String getVersion()      { return version; }
         public String getLastScanned()  { return lastScanned; }
         public String getFindingCount() { return findingCount; }
     }

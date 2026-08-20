@@ -12,6 +12,7 @@ public class Repository {
     private String        name;
     private String        localPath;
     private String        url;           // optional remote URL for display
+    private String        version;       // tag/branch cloned, or null if added locally
     private LocalDateTime createdAt;
     private LocalDateTime lastScanned;   // null if never scanned
 
@@ -39,6 +40,9 @@ public class Repository {
 
     public String getUrl()                     { return url; }
     public void setUrl(String url)             { this.url = url; }
+
+    public String getVersion()                 { return version; }
+    public void setVersion(String version)     { this.version = version; }
 
     public LocalDateTime getCreatedAt()                    { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt)      { this.createdAt = createdAt; }

@@ -1,28 +1,39 @@
 package com.vulntriage.ui.settings;
 
 import com.vulntriage.app.AppContext;
+import com.vulntriage.config.AppConfig;
+import com.vulntriage.triage.cloud.CloudTriageStrategy;
+import com.vulntriage.triage.cloud.LlmProvider;
 import com.vulntriage.triage.ollama.OllamaTriageStrategy;
+import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
-import javafx.application.Platform;
 import static com.vulntriage.config.ThemeColors.*;
 
-/**
- * Settings screen — configure Ollama connection and application preferences.
- */
 public class SettingsView {
 
-
     private final AppContext ctx = AppContext.getInstance();
+    private final AppConfig  cfg = AppConfig.getInstance();
 
-    private TextField urlField;
-    private TextField modelField;
-    private TextField delayField;
-    private Label     connectionStatus;
+    // Ollama fields
+    private TextField     urlField;
+    private TextField     modelField;
+    private TextField     delayField;
+
+    // Cloud fields
+    private PasswordField apiKeyField;
+    private TextField     cloudModelField;
+
+    // Shared
+    private Label                 connectionStatus;
+    private ComboBox<LlmProvider> providerBox;
+    private VBox                  ollamaFields;
+    private VBox                  cloudFields;
+    private Button                saveBtn;
 
     public Node build() {
         ScrollPane scroll = new ScrollPane(buildContent());
@@ -40,61 +51,123 @@ public class SettingsView {
         Label title = new Label("Settings");
         title.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
 
-        root.getChildren().addAll(title, buildOllamaCard(), buildAboutCard());
+        root.getChildren().addAll(title, buildLlmCard(), buildAboutCard());
         return root;
     }
 
-    // ── Ollama card ────────────────────────────────────────────────────────
+    // ── LLM provider card ──────────────────────────────────────────────────
 
-    private VBox buildOllamaCard() {
-        VBox card = card("Ollama — LLM Backend");
+    private VBox buildLlmCard() {
+        VBox card = card("LLM Backend");
 
         Label desc = new Label(
-            "VulnTriage uses a locally running Ollama instance for LLM-assisted triage. "
-            + "Install Ollama from ollama.ai, pull a model (e.g. ollama pull qwen3:14b), "
-            + "then configure the connection below.");
+            "Choose which AI provider to use for vulnerability triage. "
+            + "Ollama runs locally with no API key. Cloud providers require an API key from the provider's dashboard.");
         desc.setStyle("-fx-font-size: 12px; -fx-text-fill: " + MUTED + ";");
         desc.setWrapText(true);
 
-        GridPane grid = new GridPane();
-        grid.setHgap(16); grid.setVgap(12);
-        grid.setPadding(new Insets(8, 0, 8, 0));
+        // ── Provider dropdown ──────────────────────────────────────────────
+        ColumnConstraints lc = new ColumnConstraints(130);
+        ColumnConstraints fc = new ColumnConstraints();
+        fc.setHgrow(Priority.ALWAYS);
 
+        providerBox = new ComboBox<>();
+        providerBox.getItems().addAll(LlmProvider.values());
+        providerBox.setValue(cfg.getActiveProvider());
+        providerBox.setMaxWidth(Double.MAX_VALUE);
+        providerBox.setStyle("-fx-font-size: 12px;");
+
+        GridPane providerRow = new GridPane();
+        providerRow.setHgap(16);
+        providerRow.getColumnConstraints().addAll(lc, fc);
+        providerRow.addRow(0, label("Provider"), providerBox);
+
+        // ── Ollama-specific fields ─────────────────────────────────────────
         urlField   = field(ctx.getOllamaUrl());
         modelField = field(ctx.getOllamaModel());
-        delayField = field(String.valueOf(com.vulntriage.config.AppConfig.getInstance().getTriageDelayMs()));
+        delayField = field(String.valueOf(cfg.getTriageDelayMs()));
 
-        grid.addRow(0, label("Ollama URL"),        urlField);
-        grid.addRow(1, label("Model Name"),        modelField);
-        grid.addRow(2, label("Delay Between\nRequests (ms)"), delayField);
-        ColumnConstraints cc1 = new ColumnConstraints(130);
-        ColumnConstraints cc2 = new ColumnConstraints();
-        cc2.setHgrow(Priority.ALWAYS);
-        grid.getColumnConstraints().addAll(cc1, cc2);
+        GridPane ollamaGrid = new GridPane();
+        ollamaGrid.setHgap(16); ollamaGrid.setVgap(12);
+        ollamaGrid.getColumnConstraints().addAll(new ColumnConstraints(130), fc);
+        ollamaGrid.addRow(0, label("Ollama URL"),  urlField);
+        ollamaGrid.addRow(1, label("Model Name"),  modelField);
+        ollamaGrid.addRow(2, label("Delay (ms)"),  delayField);
 
+        Label ollamaHint = new Label("Install Ollama from ollama.ai — then run: ollama pull qwen3:14b");
+        ollamaHint.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+
+        ollamaFields = new VBox(10, ollamaGrid, ollamaHint);
+
+        // ── Cloud-specific fields ──────────────────────────────────────────
+        apiKeyField = new PasswordField();
+        apiKeyField.setStyle("-fx-font-size: 12px; -fx-border-color: " + BORDER
+            + "; -fx-border-radius: 5; -fx-background-radius: 5; -fx-padding: 6 10;");
+        String savedKey = cfg.getLlmApiKey();
+        if (savedKey != null) apiKeyField.setText(savedKey);
+
+        String savedModel = cfg.getLlmModel();
+        cloudModelField = field(savedModel == null || savedModel.isBlank()
+            ? cfg.getActiveProvider().getDefaultModel() : savedModel);
+
+        GridPane cloudGrid = new GridPane();
+        cloudGrid.setHgap(16); cloudGrid.setVgap(12);
+        cloudGrid.getColumnConstraints().addAll(new ColumnConstraints(130), fc);
+        cloudGrid.addRow(0, label("API Key"),    apiKeyField);
+        cloudGrid.addRow(1, label("Model Name"), cloudModelField);
+
+        Label cloudHint = new Label(
+            "Get your API key from the provider's dashboard. It is stored locally in the app database.");
+        cloudHint.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+        cloudHint.setWrapText(true);
+
+        cloudFields = new VBox(10, cloudGrid, cloudHint);
+
+        // ── Toggle visibility when provider changes ─────────────────────────
+        providerBox.valueProperty().addListener((obs, old, selected) -> {
+            boolean isOllama = selected == LlmProvider.OLLAMA;
+            ollamaFields.setVisible(isOllama);
+            ollamaFields.setManaged(isOllama);
+            cloudFields.setVisible(!isOllama);
+            cloudFields.setManaged(!isOllama);
+            if (!isOllama) {
+                String cur = cloudModelField.getText();
+                if (cur.isBlank() || (old != null && old.getDefaultModel().equals(cur))) {
+                    cloudModelField.setText(selected.getDefaultModel());
+                }
+            }
+            updateSaveLabel(selected);
+        });
+
+        boolean initOllama = cfg.getActiveProvider() == LlmProvider.OLLAMA;
+        ollamaFields.setVisible(initOllama);  ollamaFields.setManaged(initOllama);
+        cloudFields.setVisible(!initOllama);  cloudFields.setManaged(!initOllama);
+
+        // ── Status + buttons ───────────────────────────────────────────────
         connectionStatus = new Label("Not checked — click Test Connection to verify.");
         connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
         connectionStatus.setWrapText(true);
 
-        HBox btnRow = new HBox(10);
-        Button testBtn  = secondaryBtn("Test Connection");
-        Button saveBtn  = primaryBtn("Save & Enable Ollama");
-        Button mockBtn  = new Button("Use Mock (testing)");
+        Button testBtn = secondaryBtn("Test Connection");
+        saveBtn        = primaryBtn("Save & Enable Ollama");
+        updateSaveLabel(cfg.getActiveProvider());
+
+        Button mockBtn = new Button("Use Mock (testing)");
         mockBtn.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + MUTED + "; "
             + "-fx-background-radius: 6; -fx-font-size: 12px; -fx-padding: 7 14; "
             + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6;");
 
         testBtn.setOnAction(e -> testConnection());
-        saveBtn.setOnAction(e -> saveOllamaSettings());
+        saveBtn.setOnAction(e -> saveSettings());
         mockBtn.setOnAction(e -> {
             ctx.enableMock();
-            connectionStatus.setText("Mock strategy enabled — no Ollama needed. Suitable for testing only.");
+            connectionStatus.setText("Mock strategy enabled — no LLM needed. Suitable for testing only.");
             connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
         });
 
-        btnRow.getChildren().addAll(testBtn, saveBtn, mockBtn);
+        HBox btnRow = new HBox(10, testBtn, saveBtn, mockBtn);
 
-        card.getChildren().addAll(desc, grid, connectionStatus, btnRow);
+        card.getChildren().addAll(desc, providerRow, ollamaFields, cloudFields, connectionStatus, btnRow);
         return card;
     }
 
@@ -108,7 +181,7 @@ public class SettingsView {
             {"Purpose",      "AI-Assisted Vulnerability Triage and Prioritisation"},
             {"Author",       "Mahesh Nair"},
             {"Supervisors",  "Prof. Francesco La Rosa  ·  Prof. Pierluigi Dell'Acqua"},
-            {"Stack",        "Java 17  ·  JavaFX 21  ·  SQLite  ·  Ollama (Qwen3:14b)"},
+            {"Stack",        "Java 17  ·  JavaFX 21  ·  SQLite  ·  Ollama / Cloud LLM"},
             {"Database",     "vulntriage.db (SQLite, local)"},
         };
 
@@ -131,65 +204,97 @@ public class SettingsView {
     // ── Actions ────────────────────────────────────────────────────────────
 
     private void testConnection() {
-        String url   = urlField.getText().trim();
-        String model = modelField.getText().trim();
+        LlmProvider provider = providerBox.getValue();
 
-        connectionStatus.setText("Testing connection to " + url + "…");
-        connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
-
-        Task<Boolean> task = new Task<>() {
-            @Override
-            protected Boolean call() {
-                return new OllamaTriageStrategy(url, model).isAvailable();
-            }
-        };
-
-        task.setOnSucceeded(e -> Platform.runLater(() -> {
-            if (task.getValue()) {
-                connectionStatus.setText("✓ Connected — " + model
-                    + " is available at " + url);
-                connectionStatus.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; "
-                    + "-fx-text-fill: " + GREEN + ";");
-            } else {
-                connectionStatus.setText("✗ Cannot reach Ollama at " + url
-                    + "\nCheck that Ollama is running: ollama serve"
-                    + "\nAnd that the model is pulled: ollama pull " + model);
-                connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + RED + ";");
-            }
-        }));
-
-        task.setOnFailed(e -> Platform.runLater(() -> {
-            connectionStatus.setText("✗ Error: " + task.getException().getMessage());
-            connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + RED + ";");
-        }));
-
-        new Thread(task, "settings-check").start();
+        if (provider == LlmProvider.OLLAMA) {
+            String url   = urlField.getText().trim();
+            String model = modelField.getText().trim();
+            connectionStatus.setText("Testing connection to " + url + "…");
+            connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+            Task<Boolean> task = new Task<>() {
+                @Override protected Boolean call() {
+                    return new OllamaTriageStrategy(url, model).isAvailable();
+                }
+            };
+            task.setOnSucceeded(e -> Platform.runLater(() -> {
+                if (task.getValue()) {
+                    ok("Connected — " + model + " is available at " + url);
+                } else {
+                    err("Cannot reach Ollama at " + url
+                        + "\nCheck that Ollama is running: ollama serve"
+                        + "\nModel must be pulled: ollama pull " + model);
+                }
+            }));
+            task.setOnFailed(e -> Platform.runLater(() ->
+                err("Error: " + task.getException().getMessage())));
+            new Thread(task, "settings-check").start();
+        } else {
+            String apiKey = apiKeyField.getText().trim();
+            String model  = cloudModelField.getText().trim();
+            if (apiKey.isBlank()) { err("API key is required."); return; }
+            connectionStatus.setText("Testing connection to " + provider.getDisplayName() + "…");
+            connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+            Task<Boolean> task = new Task<>() {
+                @Override protected Boolean call() {
+                    return new CloudTriageStrategy(provider, apiKey, model).isAvailable();
+                }
+            };
+            task.setOnSucceeded(e -> Platform.runLater(() -> {
+                if (task.getValue()) {
+                    ok("Connected — " + provider.getDisplayName() + " API key is valid.");
+                } else {
+                    err("Could not reach " + provider.getDisplayName()
+                        + ". Check your API key and internet connection.");
+                }
+            }));
+            task.setOnFailed(e -> Platform.runLater(() ->
+                err("Error: " + task.getException().getMessage())));
+            new Thread(task, "settings-check").start();
+        }
     }
 
-    private void saveOllamaSettings() {
-        String url   = urlField.getText().trim();
-        String model = modelField.getText().trim();
+    private void saveSettings() {
+        LlmProvider provider = providerBox.getValue();
 
-        if (url.isBlank() || model.isBlank()) {
-            connectionStatus.setText("URL and model name are required.");
-            return;
+        if (provider == LlmProvider.OLLAMA) {
+            String url   = urlField.getText().trim();
+            String model = modelField.getText().trim();
+            if (url.isBlank() || model.isBlank()) { err("URL and model name are required."); return; }
+            try {
+                int delay = Integer.parseInt(delayField.getText().trim());
+                if (delay < 0) throw new NumberFormatException();
+                cfg.saveTriageDelay(delay);
+            } catch (NumberFormatException e) {
+                err("Delay must be a non-negative integer (milliseconds)."); return;
+            }
+            ctx.enableOllama(url, model);
+            ok("Ollama enabled — " + model + " at " + url);
+        } else {
+            String apiKey = apiKeyField.getText().trim();
+            String model  = cloudModelField.getText().trim();
+            if (apiKey.isBlank()) { err("API key is required."); return; }
+            if (model.isBlank())  { err("Model name is required."); return; }
+            ctx.enableCloudProvider(provider, apiKey, model);
+            ok(provider.getDisplayName() + " enabled — model: " + model
+                + "\nThe Triage screen will now use this provider.");
         }
+    }
 
-        // Parse and save delay
-        try {
-            int delay = Integer.parseInt(delayField.getText().trim());
-            if (delay < 0) throw new NumberFormatException();
-            com.vulntriage.config.AppConfig.getInstance().saveTriageDelay(delay);
-        } catch (NumberFormatException e) {
-            connectionStatus.setText("Delay must be a non-negative integer (milliseconds).");
-            return;
-        }
+    private void updateSaveLabel(LlmProvider p) {
+        if (saveBtn == null) return;
+        saveBtn.setText(p == LlmProvider.OLLAMA
+            ? "Save & Enable Ollama"
+            : "Save & Enable " + p.getDisplayName());
+    }
 
-        ctx.enableOllama(url, model);
-        connectionStatus.setText("✓ Ollama enabled — " + model + " at " + url
-            + "\nThe Triage screen will now use this model.");
-        connectionStatus.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; "
-            + "-fx-text-fill: " + GREEN + ";");
+    private void ok(String msg) {
+        connectionStatus.setText("✓ " + msg);
+        connectionStatus.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: " + GREEN + ";");
+    }
+
+    private void err(String msg) {
+        connectionStatus.setText("✗ " + msg);
+        connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + RED + ";");
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -199,22 +304,19 @@ public class SettingsView {
         card.setPadding(new Insets(22, 24, 22, 24));
         card.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 8, 0, 0, 2);");
-
         Label heading = new Label(title);
         heading.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
         card.getChildren().add(heading);
-
         Separator sep = new Separator();
         sep.setStyle("-fx-background-color: " + BORDER + ";");
         card.getChildren().add(sep);
-
         return card;
     }
 
     private TextField field(String value) {
         TextField f = new TextField(value);
-        f.setStyle("-fx-font-size: 12px; -fx-border-color: " + BORDER + "; "
-            + "-fx-border-radius: 5; -fx-background-radius: 5; -fx-padding: 6 10;");
+        f.setStyle("-fx-font-size: 12px; -fx-border-color: " + BORDER
+            + "; -fx-border-radius: 5; -fx-background-radius: 5; -fx-padding: 6 10;");
         return f;
     }
 

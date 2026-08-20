@@ -10,7 +10,6 @@ import com.vulntriage.domain.Repository;
 import com.vulntriage.triage.api.TriageResult;
 import com.vulntriage.triage.api.TriageStrategy;
 import com.vulntriage.triage.mock.MockTriageStrategy;
-import com.vulntriage.triage.ollama.OllamaTriageStrategy;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -56,9 +55,7 @@ public class TargetedTriageView {
     private ComboBox<String>        severityBox;
     private Label                   matchLabel;
 
-    // ── Ollama connection controls ─────────────────────────────────────────
-    private TextField               ollamaUrlField;
-    private TextField               ollamaModelField;
+    // ── LLM connection status ──────────────────────────────────────────────
     private Label                   connectionStatus;
 
     // ── Triage config controls ─────────────────────────────────────────────
@@ -140,19 +137,20 @@ public class TargetedTriageView {
         panel.setStyle("-fx-background-color: " + CARD + "; "
             + "-fx-border-color: " + BORDER + "; -fx-border-width: 0 1 0 0;");
 
-        // ── Ollama connection ──────────────────────────────────────────────
-        Label connHeading = sectionHeading("Ollama Connection");
+        // ── LLM backend ────────────────────────────────────────────────────
+        Label connHeading = sectionHeading("LLM Backend");
 
-        ollamaUrlField = new TextField(ctx.getOllamaUrl());
-        ollamaUrlField.setPromptText("http://localhost:11434");
-        styleField(ollamaUrlField);
-
-        ollamaModelField = new TextField(ctx.getOllamaModel());
-        ollamaModelField.setPromptText("qwen3:8b");
-        styleField(ollamaModelField);
+        Label providerLabel = new Label(ctx.triageStrategy().getModelName());
+        providerLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: " + TEXT
+            + "; -fx-background-color: " + SURFACE + "; -fx-padding: 6 10; "
+            + "-fx-background-radius: 5; -fx-border-color: " + BORDER + "; -fx-border-radius: 5;");
+        providerLabel.setMaxWidth(Double.MAX_VALUE);
 
         connectionStatus = new Label("Using: " + ctx.triageStrategy().getModelName());
         connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + GREEN + "; -fx-font-weight: bold;");
+
+        Label settingsHint = new Label("Change provider in Settings.");
+        settingsHint.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + ";");
 
         Button checkBtn = secondaryBtn("Check Connection");
         checkBtn.setMaxWidth(Double.MAX_VALUE);
@@ -253,8 +251,7 @@ public class TargetedTriageView {
 
         panel.getChildren().addAll(
             connHeading,
-            fieldLabel("Ollama URL"), ollamaUrlField,
-            fieldLabel("Model"), ollamaModelField,
+            providerLabel, settingsHint,
             connectionStatus, checkBtn,
             new Separator(),
             filterHead,
@@ -759,16 +756,7 @@ public class TargetedTriageView {
     }
 
     private TriageStrategy resolveStrategy() {
-        TriageStrategy current = ctx.triageStrategy();
-        if (current instanceof MockTriageStrategy) return current;
-        String url   = ollamaUrlField != null && !ollamaUrlField.getText().isBlank()
-            ? ollamaUrlField.getText().trim() : ctx.getOllamaUrl();
-        String model = ollamaModelField != null && !ollamaModelField.getText().isBlank()
-            ? ollamaModelField.getText().trim() : ctx.getOllamaModel();
-        OllamaTriageStrategy ollama = new OllamaTriageStrategy(url, model);
-        if (ollama.isAvailable()) return ollama;
-        setStatus("Ollama not reachable — falling back to Mock strategy.");
-        return new MockTriageStrategy();
+        return ctx.triageStrategy();
     }
 
     private void stopTriage() {
@@ -1131,26 +1119,21 @@ public class TargetedTriageView {
     // ── Ollama connection ──────────────────────────────────────────────────
 
     private void checkConnection() {
-        String url   = ollamaUrlField.getText().trim();
-        String model = ollamaModelField.getText().trim();
-
-        connectionStatus.setText("Checking…");
+        TriageStrategy strategy = ctx.triageStrategy();
+        connectionStatus.setText("Checking " + strategy.getModelName() + "…");
         connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
 
         javafx.concurrent.Task<Boolean> task = new javafx.concurrent.Task<>() {
-            @Override protected Boolean call() {
-                return new OllamaTriageStrategy(url, model).isAvailable();
-            }
+            @Override protected Boolean call() { return strategy.isAvailable(); }
         };
         task.setOnSucceeded(e -> Platform.runLater(() -> {
-            boolean ok = task.getValue();
-            if (ok) {
-                connectionStatus.setText("✓ Connected — " + model + " ready");
+            if (task.getValue()) {
+                connectionStatus.setText("✓ Connected — " + strategy.getModelName() + " ready");
                 connectionStatus.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; "
                     + "-fx-text-fill: " + GREEN + ";");
-                ctx.enableOllama(url, model);
             } else {
-                connectionStatus.setText("✗ Cannot reach Ollama at " + url);
+                connectionStatus.setText("✗ Cannot reach " + strategy.getModelName()
+                    + ". Check Settings.");
                 connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + RED + ";");
             }
         }));
@@ -1158,7 +1141,7 @@ public class TargetedTriageView {
             connectionStatus.setText("✗ Error: " + task.getException().getMessage());
             connectionStatus.setStyle("-fx-font-size: 11px; -fx-text-fill: " + RED + ";");
         }));
-        new Thread(task, "ollama-check").start();
+        new Thread(task, "llm-check").start();
     }
 
     // ── Style helpers ──────────────────────────────────────────────────────
