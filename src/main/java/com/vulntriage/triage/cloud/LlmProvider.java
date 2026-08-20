@@ -2,7 +2,7 @@ package com.vulntriage.triage.cloud;
 
 public enum LlmProvider {
 
-    OLLAMA   ("Ollama (Local)",         "qwen3:8b",                      false),
+    OLLAMA   ("Ollama",                 "qwen3:8b",                      false),
     OPENAI   ("OpenAI (GPT)",           "gpt-4o-mini",                   true),
     ANTHROPIC("Anthropic (Claude)",     "claude-3-5-haiku-20241022",     true),
     GEMINI   ("Google Gemini",          "gemini-1.5-flash",              true),
