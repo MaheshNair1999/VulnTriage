@@ -3,11 +3,12 @@
 **AI-Assisted Vulnerability Triage and Prioritisation System**
 
 A desktop application that combines static analysis (Semgrep, Trivy, Gitleaks, CodeQL, SonarQube) with
-LLM-assisted triage (via Ollama) to reduce manual review effort for security findings.
-Supports multiple independent project databases, configurable scan workflows, versioned prompt templates,
+LLM-assisted triage to reduce manual review effort for security findings.
+Supports multiple LLM backends (Ollama, OpenAI, Anthropic Claude, Google Gemini, DeepSeek),
+multiple independent project databases, configurable scan workflows, versioned prompt templates,
 and evaluation metrics comparing LLM verdicts against manual ground truth across multiple prompt versions.
 
-Built with Java 17, JavaFX 21, SQLite, and Ollama.
+Built with Java 21, JavaFX 21, and SQLite.
 
 ---
 
@@ -18,7 +19,8 @@ Inside the extracted folder, double-click **VulnTriage.vbs** to launch the appli
 (`VulnTriage-run.bat` is the underlying launcher used by the VBS — keep both files in the same folder.)
 
 The bundle is self-contained — Java, JavaFX, and all dependencies are included.
-You only need **Ollama** (for LLM triage) and the scanners you want to use (Semgrep, Trivy, etc.).
+For LLM triage you need either **Ollama** (local, free) or an API key for OpenAI, Anthropic, Gemini, or DeepSeek.
+You also need the scanners you want to use (Semgrep, Trivy, etc.).
 
 ---
 
@@ -26,16 +28,17 @@ You only need **Ollama** (for LLM triage) and the scanners you want to use (Semg
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Java | 17+ | https://adoptium.net |
+| Java | 21+ | https://adoptium.net |
 | Maven | 3.8+ | https://maven.apache.org |
 | Semgrep | Latest | `pip install semgrep` |
 | Trivy | Latest | https://trivy.dev |
 | Gitleaks | Latest | https://github.com/gitleaks/gitleaks |
 | CodeQL | Latest | https://codeql.github.com |
 | SonarQube | Latest | https://www.sonarsource.com/products/sonarqube |
-| Ollama | Latest | https://ollama.ai |
+| Ollama | Latest (optional) | https://ollama.ai |
 
 Semgrep and Trivy are the default scanners. Gitleaks, CodeQL, and SonarQube are optional and used via workflows or direct scan config.
+Ollama is optional — you can use any supported cloud LLM provider instead (configured in Settings).
 
 ---
 
@@ -46,15 +49,13 @@ Semgrep and Trivy are the default scanners. Gitleaks, CodeQL, and SonarQube are 
 git clone https://github.com/MaheshNair1999/VulnTriage.git
 cd VulnTriage
 
-# 2. Pull the LLM model
-ollama pull qwen3:8b
-
-# 3. Start Ollama (in a separate terminal)
-ollama serve
-
-# 4. Run the application
+# 2. Run the application
 mvn javafx:run
 ```
+
+For LLM triage, either:
+- **Ollama (local):** `ollama pull qwen3:8b` then `ollama serve`
+- **Cloud provider:** open Settings, select your provider (OpenAI / Anthropic / Gemini / DeepSeek), and enter your API key
 
 On first launch a project selector appears. Create a new project (`.db` file) or open an existing one. Projects are stored in the `projects/` folder by default.
 
@@ -69,6 +70,9 @@ Click the project badge in the sidebar at any time to switch projects.
 
 ### Step 2 — Add a Repository
 Click **Repositories** → **Add Repository** → browse to a local code folder.
+
+To clone directly from GitHub, click **Clone from GitHub**, paste a GitHub URL, and optionally click **Fetch Tags** to pick a specific release or version tag. The repository is cloned into a folder you choose and registered automatically. The version/tag is stored and shown in the repository table.
+
 Press **Delete** with a repository selected to remove it.
 Removing a repository hides it from the list but preserves all its findings.
 
@@ -130,7 +134,7 @@ Switching between templates while editing correctly saves the current template, 
 ### Step 7 — Triage
 Click **Triage** to run an LLM triage pass on a filtered subset of findings.
 
-**Ollama Connection** — configure the URL and model at the top of the left panel and click **Check Connection** to verify.
+**LLM Backend** — the active provider and model are shown at the top of the left panel. Click **Check Connection** to verify. To change the provider, go to **Settings**.
 
 **Filter Criteria** — narrow down findings by scanner, repository, rule pattern, and severity, then click **Preview Matches** to see the matched set before committing to a run.
 
@@ -163,7 +167,7 @@ Double-click the JSON preview panel to open an expanded view.
 { "type": "scan",   "scanner": "sonarqube", "sonar_url": "http://localhost:9000", "sonar_token": "..." }
 { "type": "filter", "condition": "severity >= WARNING" }
 { "type": "sample", "size": "1000" }
-{ "type": "triage", "model": "qwen3:8b", "run_name": "My Run" }
+{ "type": "triage", "model": "qwen3:8b", "run_name": "My Run" }  // uses active provider
 { "type": "score" }
 { "type": "report" }
 ```
@@ -216,7 +220,7 @@ src/main/java/com/vulntriage/
 ├── repository/   Repository interfaces + SQLite implementations
 ├── sampling/     StratifiedSampler
 ├── scanner/      ScannerAdapter, SemgrepAdapter, TrivyAdapter, GitleaksAdapter, CodeQLAdapter, SonarQubeAdapter, ScannerFactory
-├── triage/       TriageStrategy, OllamaTriageStrategy, MockTriageStrategy, PromptBuilder
+├── triage/       TriageStrategy, OllamaTriageStrategy, CloudTriageStrategy (OpenAI/Anthropic/Gemini/DeepSeek), MockTriageStrategy, PromptBuilder, LlmProvider
 └── ui/           JavaFX screens
     ├── dashboard/    Summary statistics with per-scanner breakdown
     ├── findings/     Filterable findings browser with double-click popup
@@ -226,7 +230,7 @@ src/main/java/com/vulntriage/
     ├── triage/       Triage (active runner) + Triage Results (read-only viewer)
     ├── workflow/     Workflow builder and runner
     ├── evaluation/   Metrics, confusion matrix, multi-version comparison, and per-scanner breakdown
-    └── settings/     Ollama and application settings
+    └── settings/     LLM provider and application settings
 ```
 
 ---
