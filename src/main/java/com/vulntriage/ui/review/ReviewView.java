@@ -273,6 +273,29 @@ public class ReviewView {
         fpBtn .setOnAction(e -> { assignVerdict(Verdict.FP);     root.requestFocus(); });
         revBtn.setOnAction(e -> { assignVerdict(Verdict.REVIEW); root.requestFocus(); });
 
+        // Clear verdict button
+        Button clearBtn = new Button("✕  Clear Verdict");
+        clearBtn.setMaxWidth(Double.MAX_VALUE);
+        clearBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: " + MUTED + "; "
+            + "-fx-background-radius: 8; -fx-padding: 7 16; -fx-font-size: 12px; -fx-cursor: hand; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 8;");
+        clearBtn.setOnMouseEntered(e -> clearBtn.setStyle(
+            "-fx-background-color: " + NEUTRAL_BG + "; -fx-text-fill: " + TEXT + "; "
+            + "-fx-background-radius: 8; -fx-padding: 7 16; -fx-font-size: 12px; -fx-cursor: hand; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 8;"));
+        clearBtn.setOnMouseExited(e -> clearBtn.setStyle(
+            "-fx-background-color: transparent; -fx-text-fill: " + MUTED + "; "
+            + "-fx-background-radius: 8; -fx-padding: 7 16; -fx-font-size: 12px; -fx-cursor: hand; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 8;"));
+        clearBtn.setOnAction(e -> {
+            if (findings.isEmpty()) return;
+            Finding cf = findings.get(index);
+            ctx.reviewRepo().deleteByFindingId(cf.getId());
+            setCurrentVerdictLabel(null);
+            showFinding(index);
+            root.requestFocus();
+        });
+
         // Navigation buttons
         HBox navRow = new HBox(8);
         navRow.setAlignment(Pos.CENTER);
@@ -318,7 +341,7 @@ public class ReviewView {
 
         panel.getChildren().addAll(
             heading, currentVerdictLabel, divider,
-            tpBtn, fpBtn, revBtn,
+            tpBtn, fpBtn, revBtn, clearBtn,
             navRow, new Separator(),
             statsHeading, tpStat, fpStat, revStat
         );
