@@ -65,7 +65,8 @@ public class WorkflowView {
     private ProgressBar progressBar;
     private ListView<WorkflowDefinition> savedList;
     private Button stopWorkflowBtn;
-    private volatile Thread currentWorkflowThread;
+    private volatile Thread  currentWorkflowThread;
+    private volatile boolean workflowStopped = false;
 
     public Node build() {
         loadSaved();
@@ -126,11 +127,18 @@ public class WorkflowView {
         Label paletteLabel = sectionHeading("Add Step");
         HBox palette = buildPalette();
 
-        // Steps list
+        // Steps list — wrapped in a ScrollPane so it grows and scrolls instead of pushing buttons off screen
         Label stepsLabel = sectionHeading("Steps");
         VBox stepsList = buildStepsList();
+        ScrollPane stepsScroll = new ScrollPane(stepsList);
+        stepsScroll.setFitToWidth(true);
+        stepsScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        stepsScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        stepsScroll.setStyle("-fx-background: transparent; -fx-background-color: transparent; "
+            + "-fx-border-color: transparent;");
+        VBox.setVgrow(stepsScroll, Priority.ALWAYS);
 
-        // Action buttons
+        // Action buttons (always visible at the bottom)
         HBox actions = buildActionButtons();
 
         // Progress
@@ -143,10 +151,11 @@ public class WorkflowView {
         statusLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
         statusLabel.setWrapText(true);
 
+        VBox.setVgrow(panel, Priority.ALWAYS);
         panel.getChildren().addAll(
             nameLabel, nameField,
             paletteLabel, palette,
-            stepsLabel, stepsList,
+            stepsLabel, stepsScroll,
             actions, progressBar, statusLabel
         );
         return panel;
@@ -186,7 +195,6 @@ public class WorkflowView {
 
     private VBox buildStepsList() {
         VBox list = new VBox(6);
-        list.setPrefHeight(260);
         list.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 8; "
             + "-fx-padding: 10; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 6, 0, 0, 2);");
@@ -325,6 +333,8 @@ public class WorkflowView {
         runBtn .setOnAction(e -> runWorkflow());
         clearBtn.setOnAction(e -> { stepRows.clear(); nameField.setText("My Security Workflow"); hasUnsavedChanges = false; });
         stopWorkflowBtn.setOnAction(e -> {
+            workflowStopped = true;
+            ctx.requestStop();
             Thread t = currentWorkflowThread;
             if (t != null) t.interrupt();
             stopWorkflowBtn.setDisable(true);
@@ -787,6 +797,8 @@ public class WorkflowView {
         }
 
         final com.vulntriage.domain.Repository finalRepo = repo;
+        workflowStopped = false;
+        ctx.clearStopRequest();
         progressBar.setVisible(true);
         progressBar.setProgress(-1); // indeterminate
         ctx.setWorkflowRunning(true);
@@ -834,8 +846,7 @@ public class WorkflowView {
             ctx.setWorkflowRunning(false);
             stopWorkflowBtn.setVisible(false);
             stopWorkflowBtn.setManaged(false);
-            boolean interrupted = Thread.interrupted();
-            setStatus(interrupted ? "Workflow stopped." : "Workflow complete for " + finalRepo.getName() + ".");
+            setStatus(workflowStopped ? "Workflow stopped." : "Workflow complete for " + finalRepo.getName() + ".");
         }));
 
         task.setOnFailed(e -> Platform.runLater(() -> {

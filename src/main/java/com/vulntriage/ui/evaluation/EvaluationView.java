@@ -441,59 +441,44 @@ public class EvaluationView {
 
         VBox tableContainer = new VBox(8);
 
-        if (allVersions.size() == 2) {
-            String baseVer = allVersions.get(0);
-            String vsVer   = allVersions.get(1);
-            String baseName = ctx.promptTemplateRepo().findByVersion(baseVer)
-                .map(t -> baseVer + ": " + t.getName()).orElse(baseVer);
-            String vsName = ctx.promptTemplateRepo().findByVersion(vsVer)
-                .map(t -> vsVer + ": " + t.getName()).orElse(vsVer);
-            Label sub = new Label(baseName + "  ·  " + vsName);
-            sub.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
-            sub.setWrapText(true);
-            buildComparisonTable(tableContainer, baseVer, vsVer, reviewMap);
-            compareArea.getChildren().addAll(heading, sub, tableContainer);
-        } else {
-            // Multi-version: show pickers
-            Label baseLabel = new Label("Base:");
-            baseLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
-            Label vsLabel = new Label("Compare to:");
-            vsLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
+        // Always show pickers regardless of version count
+        Label baseLabel = new Label("Base:");
+        baseLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
+        Label vsLabel = new Label("Compare to:");
+        vsLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
 
-            ComboBox<String> baseBox = new ComboBox<>(
-                javafx.collections.FXCollections.observableArrayList(allVersions));
-            baseBox.setValue(allVersions.get(0));
-            baseBox.setStyle("-fx-font-size: 12px;");
+        ComboBox<String> baseBox = new ComboBox<>(
+            javafx.collections.FXCollections.observableArrayList(allVersions));
+        baseBox.setValue(allVersions.get(0));
+        baseBox.setStyle("-fx-font-size: 12px;");
 
-            ComboBox<String> vsBox = new ComboBox<>(
-                javafx.collections.FXCollections.observableArrayList(allVersions));
-            vsBox.setValue(allVersions.get(allVersions.size() - 1));
-            vsBox.setStyle("-fx-font-size: 12px;");
+        ComboBox<String> vsBox = new ComboBox<>(
+            javafx.collections.FXCollections.observableArrayList(allVersions));
+        vsBox.setValue(allVersions.get(allVersions.size() - 1));
+        vsBox.setStyle("-fx-font-size: 12px;");
 
-            HBox pickerRow = new HBox(10, baseLabel, baseBox, vsLabel, vsBox);
-            pickerRow.setAlignment(Pos.CENTER_LEFT);
-            pickerRow.setPadding(new Insets(0, 0, 4, 0));
+        HBox pickerRow = new HBox(10, baseLabel, baseBox, vsLabel, vsBox);
+        pickerRow.setAlignment(Pos.CENTER_LEFT);
+        pickerRow.setPadding(new Insets(0, 0, 4, 0));
 
-            Runnable rebuild = () -> {
-                String base = baseBox.getValue();
-                String vs   = vsBox.getValue();
-                if (base == null || vs == null || base.equals(vs)) {
-                    tableContainer.getChildren().clear();
-                    Label err = new Label("Select two different versions to compare.");
-                    err.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
-                    tableContainer.getChildren().add(err);
-                    return;
-                }
-                tableContainer.getChildren().clear();
-                buildComparisonTable(tableContainer, base, vs, reviewMap);
-            };
+        Runnable rebuild = () -> {
+            String base = baseBox.getValue();
+            String vs   = vsBox.getValue();
+            tableContainer.getChildren().clear();
+            if (base == null || vs == null || base.equals(vs)) {
+                Label err = new Label("Select two different versions to compare.");
+                err.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+                tableContainer.getChildren().add(err);
+                return;
+            }
+            buildComparisonTable(tableContainer, base, vs, reviewMap);
+        };
 
-            baseBox.setOnAction(e -> rebuild.run());
-            vsBox.setOnAction(e -> rebuild.run());
-            rebuild.run();
+        baseBox.setOnAction(e -> rebuild.run());
+        vsBox.setOnAction(e -> rebuild.run());
+        rebuild.run();
 
-            compareArea.getChildren().addAll(heading, pickerRow, tableContainer);
-        }
+        compareArea.getChildren().addAll(heading, pickerRow, tableContainer);
     }
 
     private void buildComparisonTable(VBox container, String baseVer, String vsVer,
@@ -517,14 +502,6 @@ public class EvaluationView {
 
         VersionMetrics mBase = computeVersionMetrics(baseFiltered, reviewMap);
         VersionMetrics mVs   = computeVersionMetrics(vsResults,    reviewMap);
-
-        String baseName = ctx.promptTemplateRepo().findByVersion(baseVer)
-            .map(t -> baseVer + ": " + t.getName()).orElse(baseVer);
-        String vsName = ctx.promptTemplateRepo().findByVersion(vsVer)
-            .map(t -> vsVer + ": " + t.getName()).orElse(vsVer);
-        Label sub = new Label(baseName + "  ·  " + vsName);
-        sub.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
-        sub.setWrapText(true);
 
         GridPane grid = new GridPane();
         grid.setHgap(2); grid.setVgap(2);
@@ -565,7 +542,7 @@ public class EvaluationView {
         card.getChildren().add(grid);
         card.setMaxWidth(700);
 
-        container.getChildren().addAll(sub, card);
+        container.getChildren().add(card);
     }
 
     private Label compHeader(String text) {

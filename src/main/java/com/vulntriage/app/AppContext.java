@@ -180,4 +180,11 @@ public class AppContext {
 
     public String getOllamaUrl()   { return ollamaUrl; }
     public String getOllamaModel() { return ollamaModel; }
+
+    // ── Pipeline stop flag (volatile — checked from background threads) ────
+    private volatile boolean stopRequested = false;
+
+    public void requestStop()      { stopRequested = true; }
+    public void clearStopRequest() { stopRequested = false; }
+    public boolean isStopRequested() { return stopRequested; }
 }

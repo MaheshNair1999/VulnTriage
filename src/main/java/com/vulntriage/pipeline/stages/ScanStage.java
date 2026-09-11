@@ -124,8 +124,8 @@ public class ScanStage extends AbstractPipelineStage {
             run.setStatus(PipelineStatus.FAILED);
             run.setCompletedAt(LocalDateTime.now());
             scanRunRepo.update(run);
-            log.error("{} scan failed: {}", type, e.getMessage());
-            throw e;
+            log.error("{} scan failed — skipping scanner, pipeline continues: {}", type, e.getMessage());
+            return List.of();
         }
     }
 

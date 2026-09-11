@@ -5,6 +5,7 @@ import com.vulntriage.ui.UIUtils;
 import com.vulntriage.command.AssignVerdictCommand;
 import com.vulntriage.command.CommandHistory;
 import com.vulntriage.domain.Finding;
+import com.vulntriage.domain.LlmResult;
 import com.vulntriage.domain.ManualReview;
 import com.vulntriage.domain.enums.Verdict;
 import javafx.geometry.Insets;
@@ -69,6 +70,10 @@ public class ReviewView {
     private Button  tpBtn, fpBtn, revBtn;
     private VBox    root;
     private String  currentFilePath;
+
+    // LLM assessment panel (left side, shown when triage result(s) exist)
+    private VBox llmSection;
+    private VBox llmCardsBox;
 
     public Node build() {
         loadFindings();
@@ -238,11 +243,93 @@ public class ReviewView {
             "-fx-font-size: 12px; -fx-border-color: " + BORDER + "; "
             + "-fx-border-radius: 6px; -fx-background-radius: 6px;");
 
+        // LLM Assessment section
+        llmSection = buildLlmSection();
+
         panel.getChildren().addAll(
             progressBar, meta, ruleLabel, cvssLabel, fileLabel, messageLabel,
-            codeHeader, codeArea, notesHeading, notesField
+            codeHeader, codeArea, notesHeading, notesField,
+            llmSection
         );
         return panel;
+    }
+
+    // ── LLM assessment panel ───────────────────────────────────────────────
+
+    private VBox buildLlmSection() {
+        VBox section = new VBox(8);
+        section.setPadding(new Insets(14, 16, 14, 16));
+        section.setStyle(
+            "-fx-background-color: " + SURFACE + "; -fx-background-radius: 8; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 8; -fx-border-width: 1;");
+        section.setVisible(false);
+        section.setManaged(false);
+
+        HBox titleRow = new HBox(8);
+        titleRow.setAlignment(Pos.CENTER_LEFT);
+        Label icon = new Label("🤖");
+        icon.setStyle("-fx-font-size: 13px;");
+        Label heading = new Label("LLM Assessments");
+        heading.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: " + PURPLE_DIM + ";");
+        titleRow.getChildren().addAll(icon, heading);
+
+        llmCardsBox = new VBox(8);
+
+        section.getChildren().addAll(titleRow, llmCardsBox);
+        return section;
+    }
+
+    private VBox buildLlmCard(LlmResult lr) {
+        VBox card = new VBox(6);
+        card.setPadding(new Insets(10, 12, 10, 12));
+        card.setStyle(
+            "-fx-background-color: " + CARD + "; -fx-background-radius: 6; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6; -fx-border-width: 1;");
+
+        // Top row: verdict badge + confidence + model
+        HBox topRow = new HBox(8);
+        topRow.setAlignment(Pos.CENTER_LEFT);
+
+        Verdict lv = lr.getLlmVerdict();
+        String verdictColor = lv == null ? MUTED :
+            switch (lv) { case TP -> RED; case FP -> GREEN; default -> AMBER; };
+        String verdictText = lv != null ? lv.name() : "—";
+
+        Label verdictBadge = new Label(verdictText);
+        verdictBadge.setStyle(
+            "-fx-background-color: " + verdictColor + "22; "
+            + "-fx-text-fill: " + verdictColor + "; "
+            + "-fx-background-radius: 6; -fx-padding: 1 7 1 7; "
+            + "-fx-font-size: 10px; -fx-font-weight: bold;");
+
+        Label confidenceLbl = new Label(lr.getConfidence() + "% confidence");
+        confidenceLbl.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        String modelStr = (lr.getModelUsed() != null ? lr.getModelUsed() : "")
+            + (lr.getPromptVersion() != null && !lr.getPromptVersion().isBlank()
+                ? "  ·  " + lr.getPromptVersion() : "");
+        Label modelLbl = new Label(modelStr);
+        modelLbl.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
+
+        topRow.getChildren().addAll(verdictBadge, confidenceLbl, spacer, modelLbl);
+
+        // Reasoning
+        TextArea reasoningArea = new TextArea(
+            lr.getReasoning() != null ? lr.getReasoning() : "(no reasoning provided)");
+        reasoningArea.setEditable(false);
+        reasoningArea.setWrapText(true);
+        reasoningArea.setPrefRowCount(4);
+        reasoningArea.setFocusTraversable(false);
+        reasoningArea.setStyle(
+            "-fx-font-size: 12px; "
+            + "-fx-background-color: " + SURFACE + "; -fx-control-inner-background: " + SURFACE + "; "
+            + "-fx-border-color: transparent;");
+
+        card.getChildren().addAll(topRow, reasoningArea);
+        return card;
     }
 
     // ── Verdict panel (right) ──────────────────────────────────────────────
@@ -434,6 +521,18 @@ public class ReviewView {
         } else {
             notesField.setText("");
             setCurrentVerdictLabel(null);
+        }
+
+        // LLM assessments (all runs, newest first)
+        List<LlmResult> llmResults = ctx.llmRepo().findAllByFindingId(f.getId());
+        llmCardsBox.getChildren().clear();
+        if (!llmResults.isEmpty()) {
+            llmResults.forEach(lr -> llmCardsBox.getChildren().add(buildLlmCard(lr)));
+            llmSection.setVisible(true);
+            llmSection.setManaged(true);
+        } else {
+            llmSection.setVisible(false);
+            llmSection.setManaged(false);
         }
     }
 

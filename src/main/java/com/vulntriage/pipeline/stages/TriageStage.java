@@ -114,8 +114,14 @@ public class TriageStage extends AbstractPipelineStage {
 
         boolean useTemplate = promptTemplateStr != null && !promptTemplateStr.isBlank();
 
+        com.vulntriage.app.AppContext appCtx = com.vulntriage.app.AppContext.getInstance();
+
         int processed = 0;
         for (Finding finding : sample) {
+            if (Thread.currentThread().isInterrupted() || appCtx.isStopRequested()) {
+                log.info("TriageStage: stop requested — stopping triage early");
+                break;
+            }
             try {
                 TriageResult result = useTemplate
                     ? strategy.triageWithTemplate(finding, promptTemplateStr, promptVersion, null)
@@ -134,6 +140,10 @@ public class TriageStage extends AbstractPipelineStage {
 
             } catch (Exception e) {
                 log.warn("Failed to triage finding id={}: {}", finding.getId(), e.getMessage());
+                if (Thread.currentThread().isInterrupted() || appCtx.isStopRequested()) {
+                    log.info("TriageStage: stop requested after failed triage call — stopping");
+                    break;
+                }
             }
 
             processed++;

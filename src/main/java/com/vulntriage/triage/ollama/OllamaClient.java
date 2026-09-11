@@ -101,6 +101,9 @@ public class OllamaClient {
 
         } catch (TriageException e) {
             throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new TriageException("Triage interrupted", e);
         } catch (java.net.http.HttpTimeoutException e) {
             throw new TriageException(
                 "Ollama request timed out after " + timeoutSeconds + "s. "

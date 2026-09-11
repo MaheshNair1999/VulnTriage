@@ -21,6 +21,7 @@ import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
 
+import com.vulntriage.sampling.StratifiedSampler;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -62,6 +63,7 @@ public class TargetedTriageView {
     private ComboBox<PromptTemplate> promptSelector;
     private TextField               runNameField;
     private TextField               reposPathField;
+    private TextField               sampleSizeField;
     private CheckBox                forceRetriageBox;
 
     // ── Run controls ───────────────────────────────────────────────────────
@@ -211,6 +213,15 @@ public class TargetedTriageView {
         reposNote.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + ";");
         reposNote.setWrapText(true);
 
+        sampleSizeField = new TextField();
+        sampleSizeField.setPromptText("Leave blank to triage all matches");
+        styleField(sampleSizeField);
+
+        Label sampleNote = new Label(
+            "Stratified by (category, severity) — rare categories are always represented.");
+        sampleNote.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + ";");
+        sampleNote.setWrapText(true);
+
         forceRetriageBox = new CheckBox("Force re-triage (overwrite existing results)");
         forceRetriageBox.setSelected(false);
         forceRetriageBox.setStyle("-fx-font-size: 11px; -fx-text-fill: " + TEXT + ";");
@@ -265,6 +276,7 @@ public class TargetedTriageView {
             fieldLabel("Prompt Template"), promptSelector,
             fieldLabel("Run Name"), runNameField,
             fieldLabel("Repos Base Path"), reposPathField, reposNote,
+            fieldLabel("Sample Size (optional)"), sampleSizeField, sampleNote,
             forceRetriageBox,
             new Separator(),
             btnRow, progressBar, progressLabel, statusLabel
@@ -537,7 +549,28 @@ public class TargetedTriageView {
         final String  reposBase    = reposPathField.getText().trim();
         final boolean forceRetriage = forceRetriageBox.isSelected();
 
-        List<Finding> sample = new ArrayList<>(matchedFindings);
+        List<Finding> sample;
+        String sampleSizeText = sampleSizeField.getText().trim();
+        if (!sampleSizeText.isBlank()) {
+            int targetSize;
+            try {
+                targetSize = Integer.parseInt(sampleSizeText);
+            } catch (NumberFormatException ex) {
+                setStatus("Sample size must be a whole number.");
+                return;
+            }
+            if (targetSize <= 0) {
+                setStatus("Sample size must be greater than 0.");
+                return;
+            }
+            if (targetSize < matchedFindings.size()) {
+                sample = new StratifiedSampler().sample(matchedFindings, targetSize);
+            } else {
+                sample = new ArrayList<>(matchedFindings);
+            }
+        } else {
+            sample = new ArrayList<>(matchedFindings);
+        }
         final List<Finding> finalSample = sample;
 
         final String finalRunName = runName;

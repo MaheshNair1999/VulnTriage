@@ -41,4 +41,12 @@ public interface LlmResultRepository {
 
     /** Returns every LLM result across all runs and all prompt versions. */
     List<LlmResult> findAll();
+
+    /** Returns all LLM results for a finding across all runs, newest first. */
+    default List<LlmResult> findAllByFindingId(long findingId) {
+        return findAll().stream()
+            .filter(r -> r.getFindingId() == findingId)
+            .sorted(java.util.Comparator.comparingLong(LlmResult::getId).reversed())
+            .toList();
+    }
 }
