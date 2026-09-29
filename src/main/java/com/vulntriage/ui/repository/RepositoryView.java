@@ -335,6 +335,10 @@ public class RepositoryView {
     // ── Scan ───────────────────────────────────────────────────────────────
 
     private void scanSelected() {
+        if (ctx.isWorkflowRunning()) {
+            showInfo("A workflow is currently running. Wait for it to finish before starting a new scan.");
+            return;
+        }
         List<RepositoryRow> selected = new java.util.ArrayList<>(
             table.getSelectionModel().getSelectedItems());
         if (selected.isEmpty()) {

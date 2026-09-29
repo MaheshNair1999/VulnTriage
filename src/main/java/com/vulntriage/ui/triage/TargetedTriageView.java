@@ -532,6 +532,10 @@ public class TargetedTriageView {
     // ── Run triage ─────────────────────────────────────────────────────────
 
     private void runTriage() {
+        if (ctx.isWorkflowRunning()) {
+            setStatus("A workflow is currently running. Wait for it to finish before starting a triage.");
+            return;
+        }
         if (matchedFindings.isEmpty()) {
             setStatus("Run Preview first — no findings matched.");
             return;
