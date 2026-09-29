@@ -12,13 +12,22 @@ Built with Java 21, JavaFX 21, and SQLite.
 
 ---
 
-## Quick Start — Windows (No Java Required)
+## Quick Start — Pre-built Bundle (No Build Required)
 
 Download **VulnTriage.zip** from this repository and extract it.
-Inside the extracted folder, double-click **VulnTriage.vbs** to launch the application.
-(`VulnTriage-run.bat` is the underlying launcher used by the VBS — keep both files in the same folder.)
 
-The bundle is self-contained — Java, JavaFX, and all dependencies are included.
+**Windows:** double-click **VulnTriage-run.bat** to launch.
+
+**Linux:** open a terminal in the extracted folder and run:
+```bash
+chmod +x VulnTriage-run.sh
+./VulnTriage-run.sh
+```
+
+Both launchers use relative paths and pick up `JAVA_HOME` automatically (or fall back to `java`/`javaw` on your PATH).
+JavaFX 21 is bundled inside the zip — no separate JavaFX install needed.
+You need **Java 17+** on your system. Get it at https://adoptium.net if you don't have it.
+
 For LLM triage you need either **Ollama** (local, free) or an API key for OpenAI, Anthropic, Gemini, or DeepSeek.
 You also need the scanners you want to use (Semgrep, Trivy, etc.).
 
