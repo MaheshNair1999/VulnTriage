@@ -1,14 +1,14 @@
-/* ── Code snippet TextArea — light mode base (dark-mode.css overrides for dark) ── */
+/* ── Code snippet TextArea — always dark editor style in both themes ── */
 .code-snippet {
-    -fx-background-color: #F1F5F9;
-    -fx-control-inner-background: #F1F5F9;
-    -fx-text-fill: #111827;
-    -fx-border-color: #E5E7EB;
+    -fx-background-color: #070B14;
+    -fx-control-inner-background: #070B14;
+    -fx-text-fill: #CDD6F4;
+    -fx-border-color: #334155;
     -fx-border-radius: 6;
     -fx-background-radius: 6;
 }
 .code-snippet .content {
-    -fx-background-color: #F1F5F9;
+    -fx-background-color: #070B14;
 }
 
 /* ── Column + row separator lines for all TableViews (light mode base) ────── */

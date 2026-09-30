@@ -26,16 +26,13 @@ public final class UIUtils {
      * Modena's .text-area .content background inside a Dialog.
      */
     public static void fixCodeSnippetBackground(Dialog<?> dialog, TextArea... areas) {
-        boolean dark = AppContext.getInstance().isDarkMode();
-        String bg   = dark ? "#070B14" : "#F1F5F9";
-        String text = dark ? "#CDD6F4" : "#111827";
         dialog.setOnShown(e -> Platform.runLater(() -> {
             for (TextArea area : areas) {
                 javafx.scene.Node content = area.lookup(".content");
                 if (content != null) {
-                    content.setStyle("-fx-background-color: " + bg + ";");
+                    content.setStyle("-fx-background-color: #070B14;");
                 }
-                area.setStyle(area.getStyle() + " -fx-text-fill: " + text + ";");
+                area.setStyle(area.getStyle() + " -fx-text-fill: #CDD6F4;");
             }
         }));
     }
