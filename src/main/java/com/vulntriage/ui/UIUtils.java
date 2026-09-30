@@ -21,17 +21,21 @@ public final class UIUtils {
 
     /**
      * After the dialog is shown, directly style the inner content node of each
-     * TextArea to #070B14. Inline style on the child node itself beats every
-     * CSS cascade rule, which is the only reliable way to override Modena's
-     * .text-area .content background inside a Dialog.
+     * TextArea so the background matches the current theme. Inline style on the
+     * child node beats every CSS cascade rule — the only reliable way to override
+     * Modena's .text-area .content background inside a Dialog.
      */
     public static void fixCodeSnippetBackground(Dialog<?> dialog, TextArea... areas) {
+        boolean dark = AppContext.getInstance().isDarkMode();
+        String bg   = dark ? "#070B14" : "#F1F5F9";
+        String text = dark ? "#CDD6F4" : "#111827";
         dialog.setOnShown(e -> Platform.runLater(() -> {
             for (TextArea area : areas) {
                 javafx.scene.Node content = area.lookup(".content");
                 if (content != null) {
-                    content.setStyle("-fx-background-color: #070B14;");
+                    content.setStyle("-fx-background-color: " + bg + ";");
                 }
+                area.setStyle(area.getStyle() + " -fx-text-fill: " + text + ";");
             }
         }));
     }
