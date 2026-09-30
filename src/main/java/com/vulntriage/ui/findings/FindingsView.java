@@ -409,7 +409,8 @@ public class FindingsView {
         codeArea.setWrapText(false);
         codeArea.setPrefRowCount(12);
         codeArea.getStyleClass().add("code-snippet");
-        codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px; -fx-text-fill: #CDD6F4;");
+        codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px; -fx-text-fill: " + TEXT + "; "
+            + "-fx-control-inner-background: " + SURFACE + ";");
         codeArea.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) showFullCodeDialog(row);
         });
@@ -441,7 +442,8 @@ public class FindingsView {
         fileArea.setEditable(false);
         fileArea.setWrapText(false);
         fileArea.getStyleClass().add("code-snippet");
-        fileArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px; -fx-text-fill: #CDD6F4;");
+        fileArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px; -fx-text-fill: " + TEXT + "; "
+            + "-fx-control-inner-background: " + SURFACE + ";");
 
         final String finalContent = content;
         Button copyBtn = new Button("Copy All");

@@ -226,8 +226,9 @@ public class ReviewView {
         codeArea.getStyleClass().add("code-snippet");
         codeArea.setStyle(
             "-fx-font-family: '" + MONO + "'; -fx-font-size: 12px; "
-            + "-fx-text-fill: #CDD6F4; "
-            + "-fx-border-color: #313244; -fx-border-radius: 6px; "
+            + "-fx-text-fill: " + TEXT + "; "
+            + "-fx-control-inner-background: " + SURFACE + "; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6px; "
             + "-fx-background-radius: 6px;");
         codeArea.setFocusTraversable(false); // don't steal focus from root
         codeArea.setOnMouseClicked(e -> {
@@ -675,7 +676,8 @@ public class ReviewView {
         fileArea.setEditable(false);
         fileArea.setWrapText(false);
         fileArea.getStyleClass().add("code-snippet");
-        fileArea.setStyle("-fx-font-family: '" + MONO + "'; -fx-font-size: 12px; -fx-text-fill: #CDD6F4;");
+        fileArea.setStyle("-fx-font-family: '" + MONO + "'; -fx-font-size: 12px; -fx-text-fill: " + TEXT + "; "
+            + "-fx-control-inner-background: " + SURFACE + ";");
 
         final String finalContent = content;
         Button copyBtn = new Button("Copy All");

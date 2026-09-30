@@ -390,8 +390,8 @@ public class WorkflowView {
         jsonPreview.setEditable(false);
         jsonPreview.setPrefRowCount(8);
         jsonPreview.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 10px; "
-            + "-fx-background-color: #070B14; -fx-control-inner-background: #070B14; "
-            + "-fx-text-fill: #CDD6F4;");
+            + "-fx-control-inner-background: " + SURFACE + "; "
+            + "-fx-text-fill: " + TEXT + ";");
         jsonPreview.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) {
                 javafx.scene.control.Dialog<Void> dialog = new javafx.scene.control.Dialog<>();
@@ -404,8 +404,8 @@ public class WorkflowView {
                 full.setEditable(false);
                 full.setWrapText(false);
                 full.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 13px; "
-                    + "-fx-background-color: #070B14; -fx-control-inner-background: #070B14; "
-                    + "-fx-text-fill: #CDD6F4;");
+                    + "-fx-control-inner-background: " + SURFACE + "; "
+                    + "-fx-text-fill: " + TEXT + ";");
                 javafx.scene.layout.VBox.setVgrow(full, javafx.scene.layout.Priority.ALWAYS);
 
                 javafx.scene.layout.VBox content = new javafx.scene.layout.VBox(full);

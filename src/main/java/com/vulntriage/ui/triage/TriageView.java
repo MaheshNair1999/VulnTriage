@@ -288,7 +288,8 @@ public class TriageView {
         codeArea.setWrapText(false);
         codeArea.setPrefHeight(110);
         codeArea.getStyleClass().add("code-snippet");
-        codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px; -fx-text-fill: #CDD6F4;");
+        codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px; -fx-text-fill: " + TEXT + "; "
+            + "-fx-control-inner-background: " + SURFACE + ";");
 
         // ── Reasoning ──────────────────────────────────────────────────────
         Label reasonHead = sectionLabel("LLM Reasoning");

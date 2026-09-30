@@ -950,7 +950,8 @@ public class TargetedTriageView {
         codeArea.setWrapText(false);
         codeArea.setPrefHeight(100);
         codeArea.getStyleClass().add("code-snippet");
-        codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px; -fx-text-fill: #CDD6F4;");
+        codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px; -fx-text-fill: " + TEXT + "; "
+            + "-fx-control-inner-background: " + SURFACE + ";");
 
         content.getChildren().addAll(reasonHead, reasonArea, remHead, remArea, codeHead, codeArea);
 
@@ -1019,8 +1020,8 @@ public class TargetedTriageView {
         snippetArea.setWrapText(false);
         snippetArea.setPrefHeight(180);
         snippetArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px; "
-            + "-fx-background-color: #070B14; -fx-text-fill: #CDD6F4; "
-            + "-fx-control-inner-background: #070B14; -fx-border-color: #334155; "
+            + "-fx-text-fill: " + TEXT + "; "
+            + "-fx-control-inner-background: " + SURFACE + "; -fx-border-color: " + BORDER + "; "
             + "-fx-border-radius: 6; -fx-background-radius: 6;");
         snippetArea.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) showFullFileDialog(f);
@@ -1084,7 +1085,8 @@ public class TargetedTriageView {
         fileArea.setEditable(false);
         fileArea.setWrapText(false);
         fileArea.getStyleClass().add("code-snippet");
-        fileArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px; -fx-text-fill: #CDD6F4;");
+        fileArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px; -fx-text-fill: " + TEXT + "; "
+            + "-fx-control-inner-background: " + SURFACE + ";");
 
         Button copyBtn = new Button("Copy All");
         copyBtn.setStyle("-fx-background-color: " + BLUE + "; -fx-text-fill: white; "
