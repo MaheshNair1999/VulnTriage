@@ -178,6 +178,18 @@ public class AppContext {
         javafx.application.Platform.runLater(() -> scanRunning.set(running));
     }
 
+    // ── Clone state ────────────────────────────────────────────────────────
+    private final javafx.beans.property.BooleanProperty cloningRunning =
+        new javafx.beans.property.SimpleBooleanProperty(false);
+
+    public javafx.beans.property.BooleanProperty cloningRunningProperty() {
+        return cloningRunning;
+    }
+    public boolean isCloningRunning() { return cloningRunning.get(); }
+    public void setCloningRunning(boolean running) {
+        javafx.application.Platform.runLater(() -> cloningRunning.set(running));
+    }
+
     public String getOllamaUrl()   { return ollamaUrl; }
     public String getOllamaModel() { return ollamaModel; }
 

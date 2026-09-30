@@ -170,12 +170,13 @@ public class MainWindow {
         VBox triageIndicator   = buildTriageIndicator();
         VBox workflowIndicator = buildWorkflowIndicator();
         VBox scanIndicator     = buildScanIndicator();
+        VBox cloneIndicator    = buildCloneIndicator();
 
         Label version = new Label("v1.0.0  ·  Java 21  ·  SQLite");
         version.setPadding(new Insets(4, 20, 16, 20));
         version.setStyle("-fx-font-size: 9px; -fx-text-fill: " + ThemeColors.DIM + ";");
 
-        sidebar.getChildren().addAll(logo, projectBadge, div, navLabel, nav, spacer, scanIndicator, workflowIndicator, triageIndicator, version);
+        sidebar.getChildren().addAll(logo, projectBadge, div, navLabel, nav, spacer, cloneIndicator, scanIndicator, workflowIndicator, triageIndicator, version);
         return sidebar;
     }
 
@@ -326,6 +327,39 @@ public class MainWindow {
         anim.setCycleCount(Animation.INDEFINITE);
 
         AppContext.getInstance().workflowRunningProperty().addListener((obs, wasRunning, isRunning) -> {
+            box.setVisible(isRunning);
+            box.setManaged(isRunning);
+            if (isRunning) anim.play();
+            else           anim.stop();
+        });
+
+        return box;
+    }
+
+    private VBox buildCloneIndicator() {
+        VBox box = new VBox(6);
+        box.setPadding(new Insets(10, 16, 10, 16));
+        box.setStyle("-fx-background-color: " + ThemeColors.SIDEBAR_HOVER + "; -fx-background-radius: 8;");
+        box.setVisible(false);
+        box.setManaged(false);
+
+        Label spinner = new Label("↓  Cloning");
+        spinner.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #A78BFA;");
+
+        Label subLabel = new Label("Pulling from GitHub…");
+        subLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #9CA3AF;");
+
+        box.getChildren().addAll(spinner, subLabel);
+
+        String[] frames = {"↓", "⇓", "↡", "⇓"};
+        final int[] idx = {0};
+        Timeline anim = new Timeline(new KeyFrame(Duration.millis(400), e -> {
+            idx[0] = (idx[0] + 1) % frames.length;
+            spinner.setText(frames[idx[0]] + "  Cloning");
+        }));
+        anim.setCycleCount(Animation.INDEFINITE);
+
+        AppContext.getInstance().cloningRunningProperty().addListener((obs, wasRunning, isRunning) -> {
             box.setVisible(isRunning);
             box.setManaged(isRunning);
             if (isRunning) anim.play();

@@ -716,6 +716,7 @@ public class RepositoryView {
         setStatus("Cloning " + req.name() + "…");
         progressBar.setVisible(true);
         table.setDisable(true);
+        ctx.setCloningRunning(true);
 
         Task<Repository> cloneTask = new Task<>() {
             @Override
@@ -753,6 +754,7 @@ public class RepositoryView {
         cloneTask.setOnSucceeded(e -> Platform.runLater(() -> {
             Repository repo = cloneTask.getValue();
             ctx.repositoryRepo().save(repo);
+            ctx.setCloningRunning(false);
             progressBar.setVisible(false);
             table.setDisable(false);
             refresh();
@@ -760,6 +762,7 @@ public class RepositoryView {
         }));
 
         cloneTask.setOnFailed(e -> Platform.runLater(() -> {
+            ctx.setCloningRunning(false);
             progressBar.setVisible(false);
             table.setDisable(false);
             Throwable ex = cloneTask.getException();
