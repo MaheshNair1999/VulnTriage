@@ -226,8 +226,6 @@ public class ReviewView {
         codeArea.getStyleClass().add("code-snippet");
         codeArea.setStyle(
             "-fx-font-family: '" + MONO + "'; -fx-font-size: 12px; "
-            + "-fx-text-fill: " + TEXT + "; "
-            + "-fx-control-inner-background: " + SURFACE + "; "
             + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6px; "
             + "-fx-background-radius: 6px;");
         codeArea.setFocusTraversable(false); // don't steal focus from root
@@ -676,8 +674,7 @@ public class ReviewView {
         fileArea.setEditable(false);
         fileArea.setWrapText(false);
         fileArea.getStyleClass().add("code-snippet");
-        fileArea.setStyle("-fx-font-family: '" + MONO + "'; -fx-font-size: 12px; -fx-text-fill: " + TEXT + "; "
-            + "-fx-control-inner-background: " + SURFACE + ";");
+        fileArea.setStyle("-fx-font-family: '" + MONO + "'; -fx-font-size: 12px;");
 
         final String finalContent = content;
         Button copyBtn = new Button("Copy All");

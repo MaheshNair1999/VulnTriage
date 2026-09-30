@@ -111,6 +111,7 @@
 .code-snippet {
     -fx-background-color: #070B14;
     -fx-control-inner-background: #070B14;
+    -fx-text-fill: #CDD6F4;
     -fx-border-color: #334155;
     -fx-border-radius: 6;
     -fx-background-radius: 6;
