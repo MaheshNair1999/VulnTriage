@@ -70,6 +70,7 @@ public class ReviewView {
     private Button  tpBtn, fpBtn, revBtn;
     private VBox    root;
     private String  currentFilePath;
+    private long    currentRepositoryId;
 
     // LLM assessment panel (left side, shown when triage result(s) exist)
     private VBox llmSection;
@@ -510,7 +511,8 @@ public class ReviewView {
             + (f.getLineNumber() != null ? "  :  line " + f.getLineNumber() : ""));
         messageLabel.setText(f.getMessage() != null ? f.getMessage() : "");
         codeArea.setText(f.getCodeSnippet() != null ? f.getCodeSnippet() : "(no code snippet)");
-        currentFilePath = f.getFilePath();
+        currentFilePath     = f.getFilePath();
+        currentRepositoryId = f.getRepositoryId();
 
         // Existing verdict (if re-visiting)
         Optional<ManualReview> existing = ctx.reviewRepo().findByFindingId(f.getId());
@@ -662,9 +664,18 @@ public class ReviewView {
     }
 
     private void showFullFile() {
+        String resolvedPath = resolveFilePath(currentFilePath);
+        if (resolvedPath != null && !Paths.get(resolvedPath).isAbsolute()) {
+            Optional<com.vulntriage.domain.Repository> repo =
+                ctx.repositoryRepo().findById(currentRepositoryId);
+            if (repo.isPresent()) {
+                resolvedPath = repo.get().getLocalPath() + java.io.File.separator + resolvedPath;
+            }
+        }
+        final String finalResolvedPath = resolvedPath;
         String content;
         try {
-            content = Files.readString(Paths.get(resolveFilePath(currentFilePath)));
+            content = Files.readString(Paths.get(finalResolvedPath));
         } catch (Exception ex) {
             // Fall back to the stored code snippet when the file isn't on disk
             Finding f = !findings.isEmpty() ? findings.get(index) : null;

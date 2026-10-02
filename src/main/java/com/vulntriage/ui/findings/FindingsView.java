@@ -434,7 +434,14 @@ public class FindingsView {
     }
 
     private void showFullCodeDialog(FindingRow row) {
-        String resolvedPath = resolveFilePath(row.getFilePath());
+        String rawPath = resolveFilePath(row.getFilePath());
+        // If path is relative, resolve it against the repository root
+        if (rawPath != null && !java.nio.file.Paths.get(rawPath).isAbsolute()) {
+            final String rel = rawPath;
+            ctx.repositoryRepo().findById(row.getRepositoryId()).ifPresent(repo ->
+                row.setResolvedPath(repo.getLocalPath() + java.io.File.separator + rel));
+        }
+        String resolvedPath = row.getResolvedPath() != null ? row.getResolvedPath() : rawPath;
         String content;
         try {
             content = java.nio.file.Files.readString(java.nio.file.Paths.get(resolvedPath));
@@ -671,6 +678,7 @@ public class FindingsView {
         private final String codeSnippet;
         private final Double cvssScore;   // null when not applicable
         private final String scannedAt;
+        private String resolvedPath = null; // lazily set when relative path needs repo root
 
         public FindingRow(int reviewNum, long id, long repositoryId, String repoName,
                           String source, String severity, String category,
@@ -707,5 +715,7 @@ public class FindingsView {
         public String getCodeSnippet()  { return codeSnippet; }
         public Double getCvssScore()    { return cvssScore; }
         public String getScannedAt()    { return scannedAt; }
+        public String getResolvedPath() { return resolvedPath; }
+        public void   setResolvedPath(String p) { this.resolvedPath = p; }
     }
 }
