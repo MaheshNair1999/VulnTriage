@@ -93,6 +93,7 @@ public class TrivyAdapter implements ScannerAdapter {
                 return new ArrayList<>();
             }
 
+            parser.setRepositoryPath(repositoryPath);
             List<RawFinding> findings = parser.parse(output);
             log.info("Trivy scan complete: {} dependency vulnerabilities found", findings.size());
             return findings;

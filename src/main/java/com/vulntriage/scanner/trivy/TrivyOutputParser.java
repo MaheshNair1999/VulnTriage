@@ -7,6 +7,10 @@ import com.vulntriage.scanner.api.ScannerException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,7 +44,13 @@ import java.util.List;
 public class TrivyOutputParser {
 
     private static final Logger log = LoggerFactory.getLogger(TrivyOutputParser.class);
+    private static final int CONTEXT_LINES = 3;
     private final ObjectMapper mapper = new ObjectMapper();
+    private String repositoryPath = null;
+
+    public void setRepositoryPath(String repositoryPath) {
+        this.repositoryPath = repositoryPath;
+    }
 
     public List<RawFinding> parse(String json) {
         List<RawFinding> findings = new ArrayList<>();
@@ -132,7 +142,38 @@ public class TrivyOutputParser {
             }
         }
 
+        // Snippet: find the package name in the manifest file
+        String snippet = findPackageSnippet(target, pkgName);
+        if (snippet != null) f.setCodeSnippet(snippet);
+
         return f;
+    }
+
+    private String findPackageSnippet(String target, String pkgName) {
+        if (repositoryPath == null || target == null || pkgName == null) return null;
+        try {
+            Path path = Paths.get(repositoryPath, target);
+            if (!Files.exists(path)) return null;
+
+            List<String> lines = Files.readAllLines(path);
+            int totalLines = lines.size();
+            String needle = pkgName.toLowerCase();
+
+            for (int i = 0; i < totalLines; i++) {
+                if (lines.get(i).toLowerCase().contains(needle)) {
+                    int start = Math.max(0, i - CONTEXT_LINES);
+                    int end   = Math.min(totalLines - 1, i + CONTEXT_LINES);
+                    StringBuilder sb = new StringBuilder();
+                    for (int j = start; j <= end; j++) {
+                        sb.append(lines.get(j)).append('\n');
+                    }
+                    return sb.toString();
+                }
+            }
+        } catch (IOException e) {
+            // ignore — snippet is optional
+        }
+        return null;
     }
 
     /**

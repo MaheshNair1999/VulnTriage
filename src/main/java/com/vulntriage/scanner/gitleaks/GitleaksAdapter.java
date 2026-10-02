@@ -87,7 +87,9 @@ public class GitleaksAdapter implements ScannerAdapter {
                 return List.of();
             }
 
-            List<RawFinding> findings = new GitleaksOutputParser().parse(json);
+            GitleaksOutputParser gitleaksParser = new GitleaksOutputParser();
+            gitleaksParser.setRepositoryPath(repositoryPath);
+            List<RawFinding> findings = gitleaksParser.parse(json);
             log.info("Gitleaks scan complete: {} secrets found", findings.size());
             return findings;
 
