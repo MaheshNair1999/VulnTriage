@@ -510,9 +510,13 @@ public class ReviewView {
         fileLabel.setText("File: " + (f.getFilePath() != null ? f.getFilePath() : "—")
             + (f.getLineNumber() != null ? "  :  line " + f.getLineNumber() : ""));
         messageLabel.setText(f.getMessage() != null ? f.getMessage() : "");
-        codeArea.setText(f.getCodeSnippet() != null ? f.getCodeSnippet() : "(no code snippet)");
         currentFilePath     = f.getFilePath();
         currentRepositoryId = f.getRepositoryId();
+        String snippet = f.getCodeSnippet();
+        if (snippet == null || snippet.isBlank()) {
+            snippet = loadSnippetFromFile(f);
+        }
+        codeArea.setText(snippet != null && !snippet.isBlank() ? snippet : "(no code snippet)");
 
         // Existing verdict (if re-visiting)
         Optional<ManualReview> existing = ctx.reviewRepo().findByFindingId(f.getId());
@@ -649,6 +653,43 @@ public class ReviewView {
             + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6;");
         b.setFocusTraversable(false);
         return b;
+    }
+
+    private String loadSnippetFromFile(com.vulntriage.domain.Finding f) {
+        try {
+            String rawPath = resolveFilePath(f.getFilePath());
+            if (rawPath == null || rawPath.isBlank()) return null;
+
+            java.nio.file.Path path = Paths.get(rawPath);
+            if (!path.isAbsolute()) {
+                Optional<com.vulntriage.domain.Repository> repo =
+                    ctx.repositoryRepo().findById(f.getRepositoryId());
+                if (repo.isEmpty()) return null;
+                path = Paths.get(repo.get().getLocalPath(), rawPath);
+            }
+            if (!Files.exists(path)) return null;
+
+            java.util.List<String> lines = Files.readAllLines(path);
+            int total = lines.size();
+            Integer lineNum = f.getLineNumber();
+
+            if (lineNum != null && lineNum > 0) {
+                int target = lineNum - 1;
+                int start  = Math.max(0, target - 10);
+                int end    = Math.min(total - 1, target + 10);
+                StringBuilder sb = new StringBuilder();
+                for (int i = start; i <= end; i++) sb.append(lines.get(i)).append('\n');
+                return sb.toString();
+            } else {
+                int end = Math.min(total - 1, 19);
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i <= end; i++) sb.append(lines.get(i)).append('\n');
+                if (total > 20) sb.append("... (").append(total - 20).append(" more lines)");
+                return sb.toString();
+            }
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String resolveFilePath(String rawPath) {
