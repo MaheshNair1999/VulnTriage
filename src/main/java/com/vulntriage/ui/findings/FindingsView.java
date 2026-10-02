@@ -407,7 +407,7 @@ public class FindingsView {
             row.getCodeSnippet().isBlank() ? "(no code snippet)" : row.getCodeSnippet());
         codeArea.setEditable(false);
         codeArea.setWrapText(false);
-        codeArea.setPrefRowCount(12);
+        codeArea.setPrefRowCount(18);
         codeArea.getStyleClass().add("code-snippet");
         codeArea.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px;");
         codeArea.setOnMouseClicked(e -> {
@@ -456,8 +456,10 @@ public class FindingsView {
 
         VBox body = new VBox(8);
         body.setPadding(new Insets(12));
+        body.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         HBox toolbar = new HBox(copyBtn);
         toolbar.setAlignment(Pos.CENTER_RIGHT);
+        fileArea.setMaxHeight(Double.MAX_VALUE);
         VBox.setVgrow(fileArea, Priority.ALWAYS);
         body.getChildren().addAll(toolbar, fileArea);
 

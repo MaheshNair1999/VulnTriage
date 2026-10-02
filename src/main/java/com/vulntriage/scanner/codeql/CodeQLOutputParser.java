@@ -40,7 +40,7 @@ import java.util.List;
 public class CodeQLOutputParser {
 
     private static final Logger log = LoggerFactory.getLogger(CodeQLOutputParser.class);
-    private static final int CONTEXT_LINES = 3;
+    private static final int CONTEXT_LINES = 10;
     private final ObjectMapper mapper = new ObjectMapper();
     private String repositoryPath = null;
 

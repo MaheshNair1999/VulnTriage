@@ -39,7 +39,7 @@ import java.util.List;
  */
 public class SemgrepOutputParser {
 
-    private static final int CONTEXT_LINES = 3; // lines before and after flagged line
+    private static final int CONTEXT_LINES = 10; // lines before and after flagged line
     private String repositoryPath = null; // set before parsing to enable file reading
 
     public void setRepositoryPath(String path) { this.repositoryPath = path; }
