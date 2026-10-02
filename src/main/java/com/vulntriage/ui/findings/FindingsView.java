@@ -421,10 +421,23 @@ public class FindingsView {
         dialog.showAndWait();
     }
 
+    private static String resolveFilePath(String rawPath) {
+        if (rawPath == null) return rawPath;
+        if (rawPath.startsWith("/mnt/") && rawPath.length() > 6) {
+            char drive = rawPath.charAt(5);
+            if (Character.isLetter(drive)) {
+                String rest = rawPath.substring(6).replace('/', '\\');
+                return Character.toUpperCase(drive) + ":" + (rest.isEmpty() ? "\\" : rest);
+            }
+        }
+        return rawPath;
+    }
+
     private void showFullCodeDialog(FindingRow row) {
+        String resolvedPath = resolveFilePath(row.getFilePath());
         String content;
         try {
-            content = java.nio.file.Files.readString(java.nio.file.Paths.get(row.getFilePath()));
+            content = java.nio.file.Files.readString(java.nio.file.Paths.get(resolvedPath));
         } catch (Exception ex) {
             content = row.getCodeSnippet().isBlank() ? "(no code snippet)" : row.getCodeSnippet();
         }
@@ -433,8 +446,9 @@ public class FindingsView {
         dialog.setTitle("Full File");
         dialog.setHeaderText(row.getFilePath());
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.getDialogPane().setPrefWidth(800);
-        dialog.getDialogPane().setPrefHeight(640);
+        dialog.getDialogPane().setPrefWidth(900);
+        dialog.getDialogPane().setPrefHeight(700);
+        dialog.setResizable(true);
         UIUtils.applyTheme(dialog);
 
         TextArea fileArea = new TextArea(content);

@@ -649,10 +649,22 @@ public class ReviewView {
         return b;
     }
 
+    private static String resolveFilePath(String rawPath) {
+        if (rawPath == null) return rawPath;
+        if (rawPath.startsWith("/mnt/") && rawPath.length() > 6) {
+            char drive = rawPath.charAt(5);
+            if (Character.isLetter(drive)) {
+                String rest = rawPath.substring(6).replace('/', '\\');
+                return Character.toUpperCase(drive) + ":" + (rest.isEmpty() ? "\\" : rest);
+            }
+        }
+        return rawPath;
+    }
+
     private void showFullFile() {
         String content;
         try {
-            content = Files.readString(Paths.get(currentFilePath));
+            content = Files.readString(Paths.get(resolveFilePath(currentFilePath)));
         } catch (Exception ex) {
             // Fall back to the stored code snippet when the file isn't on disk
             Finding f = !findings.isEmpty() ? findings.get(index) : null;
@@ -666,13 +678,15 @@ public class ReviewView {
         dialog.setTitle("Full File");
         dialog.setHeaderText(currentFilePath);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.getDialogPane().setPrefWidth(800);
-        dialog.getDialogPane().setPrefHeight(640);
+        dialog.getDialogPane().setPrefWidth(900);
+        dialog.getDialogPane().setPrefHeight(700);
+        dialog.setResizable(true);
         UIUtils.applyTheme(dialog);
 
         TextArea fileArea = new TextArea(content);
         fileArea.setEditable(false);
         fileArea.setWrapText(false);
+        fileArea.setMaxHeight(Double.MAX_VALUE);
         fileArea.getStyleClass().add("code-snippet");
         fileArea.setStyle("-fx-font-family: '" + MONO + "'; -fx-font-size: 12px;");
 
@@ -689,6 +703,7 @@ public class ReviewView {
 
         VBox body = new VBox(8);
         body.setPadding(new Insets(12));
+        body.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         HBox toolbar = new HBox(copyBtn);
         toolbar.setAlignment(Pos.CENTER_RIGHT);
         VBox.setVgrow(fileArea, Priority.ALWAYS);
