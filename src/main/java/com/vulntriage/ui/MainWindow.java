@@ -61,8 +61,10 @@ public class MainWindow {
         stage.setMaximized(false);
         stage.setMaximized(true);
         stage.show();
-        javafx.application.Platform.runLater(
-            () -> WindowsDarkMode.apply(AppContext.getInstance().isDarkMode()));
+        javafx.application.Platform.runLater(() -> {
+            WindowsDarkMode.apply(AppContext.getInstance().isDarkMode());
+            StartupCheckDialog.show(stage);
+        });
 
         // Base stylesheet — always loaded (column separators, shared overrides)
         java.net.URL appCssUrl = getClass().getResource("/app.css");
