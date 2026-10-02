@@ -30,8 +30,8 @@ public class SemgrepAdapter implements ScannerAdapter {
     private final SemgrepOutputParser parser;
 
     // Cached after first resolution so `where`/`which` only runs once per instance
-    private String resolvedSemgrepPath = null;
-    private boolean useWsl = false;
+    private volatile String resolvedSemgrepPath = null;
+    private volatile boolean useWsl = false;
 
     public SemgrepAdapter() {
         this.parser = new SemgrepOutputParser();
@@ -94,7 +94,7 @@ public class SemgrepAdapter implements ScannerAdapter {
             log.debug("Semgrep exit code: {}", exitCode);
 
             if (stderr.length() > 0) {
-                log.debug("Semgrep stderr: {}", stderr.toString().trim());
+                log.warn("Semgrep stderr: {}", stderr.toString().trim());
             }
 
             String output = stdout.toString().trim();
@@ -147,7 +147,7 @@ public class SemgrepAdapter implements ScannerAdapter {
                 ProcessBuilder pb = new ProcessBuilder("where", "semgrep");
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
-                if (p.waitFor(15, TimeUnit.SECONDS) && p.exitValue() == 0) {
+                if (p.waitFor(5, TimeUnit.SECONDS) && p.exitValue() == 0) {
                     try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
                         String line = r.readLine();
                         if (line != null && !line.isBlank()) {
@@ -155,7 +155,7 @@ public class SemgrepAdapter implements ScannerAdapter {
                             // Verify the native install actually works
                             Process test = new ProcessBuilder(candidate, "--version")
                                 .redirectErrorStream(true).start();
-                            if (test.waitFor(20, TimeUnit.SECONDS) && test.exitValue() == 0) {
+                            if (test.waitFor(5, TimeUnit.SECONDS) && test.exitValue() == 0) {
                                 resolvedSemgrepPath = candidate;
                                 return resolvedSemgrepPath;
                             }
@@ -193,7 +193,7 @@ public class SemgrepAdapter implements ScannerAdapter {
         try {
             Process p = new ProcessBuilder("wsl", "semgrep", "--version")
                 .redirectErrorStream(true).start();
-            return p.waitFor(20, TimeUnit.SECONDS) && p.exitValue() == 0;
+            return p.waitFor(10, TimeUnit.SECONDS) && p.exitValue() == 0;
         } catch (Exception e) {
             return false;
         }
@@ -211,6 +211,7 @@ public class SemgrepAdapter implements ScannerAdapter {
     }
 
     private List<String> buildCommand(String repositoryPath, ScanConfig config) {
+        semgrepPath(); // ensure useWsl is resolved before we read it
         List<String> cmd = new ArrayList<>();
         if (useWsl) {
             cmd.add("wsl");

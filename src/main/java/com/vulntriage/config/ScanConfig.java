@@ -8,7 +8,7 @@ package com.vulntriage.config;
 public class ScanConfig {
 
     private String  semgrepRuleset  = "p/security-audit";
-    private int     timeoutSeconds  = 300;
+    private int     timeoutSeconds  = 1800; // 30 min — WSL semgrep on large repos needs time
     private int     maxFindings     = 10_000;
     private boolean runSemgrep      = false;
     private boolean runTrivy        = false;

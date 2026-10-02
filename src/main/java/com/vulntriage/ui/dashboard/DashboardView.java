@@ -12,6 +12,7 @@ import javafx.scene.Node;
 import javafx.scene.chart.*;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 
@@ -40,7 +41,6 @@ public class DashboardView {
     // The outer scroll pane — we rebuild its content on repo/scanner change
     private ScrollPane scroll;
     private long   selectedRepoId  = ALL_REPOS;
-    private String selectedScanner = "All Scanners";
 
     public Node build() {
         scroll = new ScrollPane();
@@ -284,114 +284,185 @@ public class DashboardView {
 
     // ── Scanner breakdown section ──────────────────────────────────────────
 
-    private static final java.util.List<String> SCANNER_OPTIONS = java.util.List.of(
-        "All Scanners", "Semgrep", "Trivy", "Gitleaks", "CodeQL", "SonarQube"
-    );
-
     private VBox buildScannerBreakdown() {
-        VBox section = new VBox(16);
-
-        // Header row: title + scanner dropdown
-        HBox header = new HBox(16);
-        header.setAlignment(Pos.CENTER_LEFT);
+        VBox section = new VBox(20);
 
         Label heading = new Label("Scanner Breakdown");
         heading.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
+        section.getChildren().add(heading);
 
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        ComboBox<String> scannerPicker = new ComboBox<>();
-        scannerPicker.getItems().addAll(SCANNER_OPTIONS);
-        scannerPicker.setValue(selectedScanner);
-        scannerPicker.setStyle("-fx-font-size: 12px;");
-        scannerPicker.setPrefWidth(160);
-        scannerPicker.setOnAction(e -> {
-            if (scannerPicker.getValue() != null) {
-                selectedScanner = scannerPicker.getValue();
-                rebuildContent();
-            }
-        });
-
-        header.getChildren().addAll(heading, spacer, scannerPicker);
-
-        // Filter findings by selected scanner
-        List<Finding> filtered = scopedFindings().stream()
-            .filter(f -> {
-                if ("All Scanners".equals(selectedScanner)) return true;
-                return f.getSource().name().equalsIgnoreCase(selectedScanner)
-                    || f.getSource().name().equalsIgnoreCase(selectedScanner.replace(" ", ""));
-            })
-            .toList();
-
-        if (filtered.isEmpty()) {
-            Label none = new Label("No findings for " + selectedScanner + ". Run a scan first.");
+        List<Finding> all = scopedFindings();
+        if (all.isEmpty()) {
+            Label none = new Label("No findings yet. Run a scan first.");
             none.setStyle("-fx-font-size: 12px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
-            section.getChildren().addAll(header, none);
+            section.getChildren().add(none);
             return section;
         }
 
-        long errCount  = filtered.stream().filter(f -> f.getSeverity() == Severity.ERROR).count();
-        long warnCount = filtered.stream().filter(f -> f.getSeverity() == Severity.WARNING).count();
-        long infoCount = filtered.stream().filter(f -> f.getSeverity() == Severity.INFO).count();
-        long total     = filtered.size();
+        // Per-scanner cards grid
+        java.util.Map<ScannerType, List<Finding>> byScanner = all.stream()
+            .collect(java.util.stream.Collectors.groupingBy(Finding::getSource));
 
-        String accent = scannerAccent(selectedScanner);
+        FlowPane scannerGrid = new FlowPane(16, 16);
+        scannerGrid.setPrefWrapLength(Double.MAX_VALUE);
 
-        HBox cards = new HBox(16);
-        cards.getChildren().addAll(
-            scannerCard("ERROR",   errCount,  "" + RED_EXTRA + "", "" + RED_LIGHT_BG + "", accent),
-            scannerCard("WARNING", warnCount, "" + AMBER_DIM + "", "" + AMBER_BG + "", accent),
-            scannerCard("INFO",    infoCount, "" + GREEN_DIM + "", "" + GREEN_BG + "", accent),
-            scannerCard("TOTAL",   total,     "" + BLUE_EXTRA + "", "" + BTN_BG_SECONDARY + "", accent)
-        );
-        cards.getChildren().forEach(n -> HBox.setHgrow(n, Priority.ALWAYS));
+        byScanner.entrySet().stream()
+            .sorted(java.util.Map.Entry.<ScannerType, List<Finding>>comparingByValue(
+                java.util.Comparator.comparingInt(List::size)).reversed())
+            .forEach(e -> scannerGrid.getChildren().add(buildScannerDetailCard(e.getKey(), e.getValue())));
 
-        // Top categories bar
-        VBox categoryBar = buildCategoryBar(filtered, accent);
+        section.getChildren().add(scannerGrid);
 
-        section.getChildren().addAll(header, cards, categoryBar);
+        // Bottom row: top rules + top files
+        HBox bottomRow = new HBox(16);
+        bottomRow.getChildren().addAll(buildTopRulesPanel(all), buildTopFilesPanel(all));
+        HBox.setHgrow(bottomRow.getChildren().get(0), Priority.ALWAYS);
+        HBox.setHgrow(bottomRow.getChildren().get(1), Priority.ALWAYS);
+        section.getChildren().add(bottomRow);
+
         return section;
     }
 
-    private VBox buildCategoryBar(List<Finding> findings, String accent) {
+    private VBox buildScannerDetailCard(ScannerType scanner, List<Finding> findings) {
+        String accent = scannerAccent(scanner.name());
+        long total = findings.size();
+        long errors   = findings.stream().filter(f -> f.getSeverity() == Severity.ERROR).count();
+        long warnings = findings.stream().filter(f -> f.getSeverity() == Severity.WARNING).count();
+        long infos    = findings.stream().filter(f -> f.getSeverity() == Severity.INFO).count();
+
+        VBox card = new VBox(10);
+        card.setPadding(new Insets(16, 20, 16, 20));
+        card.setPrefWidth(260);
+        card.setStyle("-fx-background-color: " + CARD_BG + "; -fx-background-radius: 10; "
+            + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);");
+
+        // Scanner name header
+        HBox nameRow = new HBox(8);
+        nameRow.setAlignment(Pos.CENTER_LEFT);
+        Rectangle dot = new Rectangle(10, 10);
+        dot.setFill(Color.web(accent));
+        dot.setArcWidth(10); dot.setArcHeight(10);
+        Label nameLabel = new Label(scanner.name());
+        nameLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: " + accent + ";");
+        Label totalLabel = new Label(total + " findings");
+        totalLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+        Region sp = new Region(); HBox.setHgrow(sp, Priority.ALWAYS);
+        nameRow.getChildren().addAll(dot, nameLabel, sp, totalLabel);
+
+        // Severity row
+        HBox sevRow = new HBox(8);
+        sevRow.getChildren().addAll(
+            sevBadge("ERR",  errors,   RED),
+            sevBadge("WARN", warnings, AMBER),
+            sevBadge("INFO", infos,    GREEN)
+        );
+
+        // Severity progress bars
+        VBox bars = new VBox(4);
+        if (total > 0) {
+            bars.getChildren().addAll(
+                severityBar("Errors",   errors,   total, RED),
+                severityBar("Warnings", warnings, total, AMBER),
+                severityBar("Info",     infos,    total, GREEN)
+            );
+        }
+
+        // Top 3 rules for this scanner
+        VBox topRules = new VBox(4);
+        Label rulesLabel = new Label("Top rules");
+        rulesLabel.setStyle("-fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: " + MUTED + ";");
+        topRules.getChildren().add(rulesLabel);
+
+        findings.stream()
+            .collect(java.util.stream.Collectors.groupingBy(
+                f -> f.getRuleId() != null ? f.getRuleId() : "unknown",
+                java.util.stream.Collectors.counting()))
+            .entrySet().stream()
+            .sorted(java.util.Map.Entry.<String, Long>comparingByValue().reversed())
+            .limit(3)
+            .forEach(e -> {
+                HBox ruleRow = new HBox(6);
+                ruleRow.setAlignment(Pos.CENTER_LEFT);
+                Label ruleId = new Label(truncate(e.getKey(), 28));
+                ruleId.setStyle("-fx-font-size: 10px; -fx-text-fill: " + TEXT + "; -fx-font-family: 'Courier New';");
+                Region rsp = new Region(); HBox.setHgrow(rsp, Priority.ALWAYS);
+                Label cnt = new Label(String.valueOf(e.getValue()));
+                cnt.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + ";");
+                ruleRow.getChildren().addAll(ruleId, rsp, cnt);
+                topRules.getChildren().add(ruleRow);
+            });
+
+        card.getChildren().addAll(nameRow, sevRow, bars, topRules);
+        return card;
+    }
+
+    private HBox sevBadge(String label, long count, String color) {
+        HBox box = new HBox(4);
+        box.setAlignment(Pos.CENTER);
+        box.setPadding(new Insets(3, 8, 3, 8));
+        box.setStyle("-fx-background-color: " + color + "22; -fx-background-radius: 6;");
+        Label lbl = new Label(label + " " + count);
+        lbl.setStyle("-fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: " + color + ";");
+        box.getChildren().add(lbl);
+        return box;
+    }
+
+    private HBox severityBar(String label, long count, long total, String color) {
+        HBox row = new HBox(8);
+        row.setAlignment(Pos.CENTER_LEFT);
+        Label lbl = new Label(label);
+        lbl.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + ";");
+        lbl.setMinWidth(55);
+        ProgressBar bar = new ProgressBar(total > 0 ? (double) count / total : 0);
+        bar.setPrefWidth(Double.MAX_VALUE);
+        bar.setPrefHeight(6);
+        bar.setStyle("-fx-accent: " + color + "; -fx-background-color: " + SURFACE + ";");
+        HBox.setHgrow(bar, Priority.ALWAYS);
+        Label cnt = new Label(String.valueOf(count));
+        cnt.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + ";");
+        cnt.setMinWidth(28);
+        row.getChildren().addAll(lbl, bar, cnt);
+        return row;
+    }
+
+    private VBox buildTopRulesPanel(List<Finding> findings) {
         VBox box = new VBox(10);
         box.setPadding(new Insets(16));
         box.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);");
 
-        Label title = new Label("Top Categories");
+        Label title = new Label("Top Vulnerability Rules");
         title.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + MUTED + ";");
         box.getChildren().add(title);
 
-        // Count by category, take top 6
-        java.util.Map<String, Long> categoryCounts = findings.stream()
+        java.util.Map<String, Long> ruleCounts = findings.stream()
             .collect(java.util.stream.Collectors.groupingBy(
-                f -> f.getCategory() != null ? f.getCategory() : "unknown",
+                f -> f.getRuleId() != null ? f.getRuleId() : "unknown",
                 java.util.stream.Collectors.counting()));
 
-        long max = categoryCounts.values().stream().mapToLong(v -> v).max().orElse(1);
+        long max = ruleCounts.values().stream().mapToLong(v -> v).max().orElse(1);
 
-        categoryCounts.entrySet().stream()
+        ruleCounts.entrySet().stream()
             .sorted(java.util.Map.Entry.<String, Long>comparingByValue().reversed())
-            .limit(6)
+            .limit(8)
             .forEach(entry -> {
                 HBox row = new HBox(10);
                 row.setAlignment(Pos.CENTER_LEFT);
 
-                Label cat = new Label(entry.getKey());
-                cat.setStyle("-fx-font-size: 11px; -fx-text-fill: " + TEXT + ";");
-                cat.setMinWidth(120);
+                Label cat = new Label(truncate(entry.getKey(), 36));
+                cat.setStyle("-fx-font-size: 11px; -fx-text-fill: " + TEXT
+                    + "; -fx-font-family: 'Courier New';");
+                cat.setMinWidth(200);
 
-                double pct = (double) entry.getValue() / max;
-                ProgressBar bar = new ProgressBar(pct);
+                ProgressBar bar = new ProgressBar((double) entry.getValue() / max);
                 bar.setPrefWidth(Double.MAX_VALUE);
-                bar.setPrefHeight(12);
-                bar.setStyle("-fx-accent: " + accent + ";");
+                bar.setPrefHeight(10);
+                bar.setStyle("-fx-accent: " + ACCENT + ";");
                 HBox.setHgrow(bar, Priority.ALWAYS);
 
                 Label cnt = new Label(String.valueOf(entry.getValue()));
-                cnt.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + "; -fx-min-width: 40; -fx-alignment: center-right;");
+                cnt.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED
+                    + "; -fx-min-width: 36; -fx-alignment: center-right;");
 
                 row.getChildren().addAll(cat, bar, cnt);
                 box.getChildren().add(row);
@@ -400,34 +471,76 @@ public class DashboardView {
         return box;
     }
 
-    private VBox scannerCard(String label, long count, String textColor, String bgColor, String accent) {
-        VBox card = new VBox(6);
-        card.setPadding(new Insets(16, 20, 16, 20));
-        card.setStyle("-fx-background-color: " + bgColor + "; -fx-background-radius: 10; "
-            + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 8, 0, 0, 2);");
+    private VBox buildTopFilesPanel(List<Finding> findings) {
+        VBox box = new VBox(10);
+        box.setPadding(new Insets(16));
+        box.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10; "
+            + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);");
 
-        Rectangle bar = new Rectangle(28, 3);
-        bar.setFill(Color.web(accent));
-        bar.setArcWidth(3); bar.setArcHeight(3);
+        Label title = new Label("Most Vulnerable Files");
+        title.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + MUTED + ";");
+        box.getChildren().add(title);
 
-        Label valueLabel = new Label(String.valueOf(count));
-        valueLabel.setStyle("-fx-font-size: 28px; -fx-font-weight: bold; "
-            + "-fx-text-fill: " + textColor + "; -fx-font-family: 'Courier New';");
+        java.util.Map<String, Long> fileCounts = findings.stream()
+            .filter(f -> f.getFilePath() != null && !f.getFilePath().isBlank())
+            .collect(java.util.stream.Collectors.groupingBy(
+                f -> {
+                    String p = f.getFilePath().replace('\\', '/');
+                    int idx = p.lastIndexOf('/');
+                    return idx >= 0 ? p.substring(idx + 1) + "  (" + p + ")" : p;
+                },
+                java.util.stream.Collectors.counting()));
 
-        Label nameLabel = new Label(label);
-        nameLabel.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: " + textColor + ";");
+        long max = fileCounts.values().stream().mapToLong(v -> v).max().orElse(1);
 
-        card.getChildren().addAll(bar, valueLabel, nameLabel);
-        return card;
+        fileCounts.entrySet().stream()
+            .sorted(java.util.Map.Entry.<String, Long>comparingByValue().reversed())
+            .limit(8)
+            .forEach(entry -> {
+                String key = entry.getKey();
+                String fileName = key.contains("  (") ? key.substring(0, key.indexOf("  (")) : key;
+                String fullPath = key.contains("  (") ? key.substring(key.indexOf("(") + 1, key.lastIndexOf(")")) : key;
+
+                HBox row = new HBox(10);
+                row.setAlignment(Pos.CENTER_LEFT);
+
+                VBox fileInfo = new VBox(1);
+                Label fName = new Label(fileName);
+                fName.setStyle("-fx-font-size: 11px; -fx-text-fill: " + TEXT
+                    + "; -fx-font-family: 'Courier New'; -fx-font-weight: bold;");
+                Label fPath = new Label(truncate(fullPath, 40));
+                fPath.setStyle("-fx-font-size: 9px; -fx-text-fill: " + MUTED + ";");
+                fileInfo.getChildren().addAll(fName, fPath);
+                fileInfo.setMinWidth(200);
+
+                ProgressBar bar = new ProgressBar((double) entry.getValue() / max);
+                bar.setPrefWidth(Double.MAX_VALUE);
+                bar.setPrefHeight(10);
+                bar.setStyle("-fx-accent: #EF4444;");
+                HBox.setHgrow(bar, Priority.ALWAYS);
+
+                Label cnt = new Label(String.valueOf(entry.getValue()));
+                cnt.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED
+                    + "; -fx-min-width: 36; -fx-alignment: center-right;");
+
+                row.getChildren().addAll(fileInfo, bar, cnt);
+                box.getChildren().add(row);
+            });
+
+        return box;
+    }
+
+    private String truncate(String s, int max) {
+        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
     }
 
     private String scannerAccent(String scanner) {
-        return switch (scanner) {
-            case "Semgrep"    -> "#F97316";
-            case "Trivy"      -> "#0EA5E9";
-            case "Gitleaks"   -> "#EF4444";
-            case "CodeQL"     -> "#8B5CF6";
-            case "SonarQube"  -> "#0D9488";
+        return switch (scanner.toUpperCase()) {
+            case "SEMGREP"    -> "#F97316";
+            case "TRIVY"      -> "#0EA5E9";
+            case "GITLEAKS"   -> "#EF4444";
+            case "CODEQL"     -> "#8B5CF6";
+            case "SONARQUBE"  -> "#0D9488";
             default           -> ACCENT;
         };
     }

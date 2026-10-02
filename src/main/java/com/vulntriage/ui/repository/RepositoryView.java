@@ -452,11 +452,14 @@ public class RepositoryView {
                 }
                 run.setStatus(PipelineStatus.COMPLETE);
                 run.setFindingsCount(count);
-            } catch (ScannerException e) {
+                final int semgrepCount = count;
+                Platform.runLater(() -> {
+                    refresh();
+                    setStatus(prefix + "Semgrep: " + semgrepCount + " findings saved.");
+                });
+            } catch (Exception e) {
                 run.setStatus(PipelineStatus.FAILED);
-                run.setCompletedAt(LocalDateTime.now());
-                ctx.scanRunRepo().update(run);
-                throw e;
+                Platform.runLater(() -> setStatus(prefix + "Semgrep failed: " + e.getMessage()));
             }
             run.setCompletedAt(LocalDateTime.now());
             ctx.scanRunRepo().update(run);
@@ -478,6 +481,11 @@ public class RepositoryView {
                     }
                     run.setStatus(PipelineStatus.COMPLETE);
                     run.setFindingsCount(count);
+                    final int trivyCount = count;
+                    Platform.runLater(() -> {
+                        refresh();
+                        setStatus(prefix + "Trivy: " + trivyCount + " findings saved.");
+                    });
                 } catch (Exception e) { run.setStatus(PipelineStatus.FAILED); }
                 run.setCompletedAt(LocalDateTime.now());
                 ctx.scanRunRepo().update(run);
@@ -500,6 +508,11 @@ public class RepositoryView {
                     }
                     run.setStatus(PipelineStatus.COMPLETE);
                     run.setFindingsCount(count);
+                    final int gitleaksCount = count;
+                    Platform.runLater(() -> {
+                        refresh();
+                        setStatus(prefix + "Gitleaks: " + gitleaksCount + " findings saved.");
+                    });
                 } catch (Exception e) { run.setStatus(PipelineStatus.FAILED); }
                 run.setCompletedAt(LocalDateTime.now());
                 ctx.scanRunRepo().update(run);
@@ -522,6 +535,11 @@ public class RepositoryView {
                     }
                     run.setStatus(PipelineStatus.COMPLETE);
                     run.setFindingsCount(count);
+                    final int codeqlCount = count;
+                    Platform.runLater(() -> {
+                        refresh();
+                        setStatus(prefix + "CodeQL: " + codeqlCount + " findings saved.");
+                    });
                 } catch (Exception e) { run.setStatus(PipelineStatus.FAILED); }
                 run.setCompletedAt(LocalDateTime.now());
                 ctx.scanRunRepo().update(run);

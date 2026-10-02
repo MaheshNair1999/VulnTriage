@@ -178,10 +178,11 @@ public class SemgrepOutputParser {
 
         try {
             Path path;
-            if (repositoryPath != null && !Paths.get(filePath).isAbsolute()) {
-                path = Paths.get(repositoryPath, filePath);
+            String resolvedPath = wslToWindowsPath(filePath);
+            if (repositoryPath != null && !Paths.get(resolvedPath).isAbsolute()) {
+                path = Paths.get(repositoryPath, resolvedPath);
             } else {
-                path = Paths.get(filePath);
+                path = Paths.get(resolvedPath);
             }
 
             if (!Files.exists(path)) return null;
@@ -208,5 +209,18 @@ public class SemgrepOutputParser {
             // File unreadable (binary, wrong encoding, etc.) — fall back to Semgrep's output
             return null;
         }
+    }
+
+    /** Converts a WSL path like /mnt/c/Users/foo to C:\Users\foo on Windows; no-op otherwise. */
+    private static String wslToWindowsPath(String path) {
+        if (path == null) return path;
+        if (path.startsWith("/mnt/") && path.length() > 6) {
+            char drive = path.charAt(5);
+            if (Character.isLetter(drive)) {
+                String rest = path.substring(6).replace('/', '\\');
+                return Character.toUpperCase(drive) + ":" + (rest.isEmpty() ? "\\" : rest);
+            }
+        }
+        return path;
     }
 }

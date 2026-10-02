@@ -86,7 +86,9 @@ public class CodeQLAdapter implements ScannerAdapter {
             );
 
             String sarif = Files.readString(sarifOut);
-            List<RawFinding> findings = new CodeQLOutputParser().parse(sarif);
+            CodeQLOutputParser parser = new CodeQLOutputParser();
+            parser.setRepositoryPath(repositoryPath);
+            List<RawFinding> findings = parser.parse(sarif);
             log.info("CodeQL scan complete: {} findings", findings.size());
             return findings;
 
