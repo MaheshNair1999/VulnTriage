@@ -403,8 +403,12 @@ public class FindingsView {
         expandHint.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
         HBox codeHeader = new HBox(8, codeHead, expandHint);
         codeHeader.setAlignment(Pos.CENTER_LEFT);
+        String snippetText = row.getCodeSnippet();
+        if (snippetText == null || snippetText.isBlank()) {
+            snippetText = loadSnippetFromFile(row);
+        }
         TextArea codeArea = new TextArea(
-            row.getCodeSnippet().isBlank() ? "(no code snippet)" : row.getCodeSnippet());
+            snippetText == null || snippetText.isBlank() ? "(no code snippet)" : snippetText);
         codeArea.setEditable(false);
         codeArea.setWrapText(false);
         codeArea.setPrefRowCount(18);
@@ -419,6 +423,49 @@ public class FindingsView {
         dialog.getDialogPane().setContent(content);
         UIUtils.fixCodeSnippetBackground(dialog, codeArea);
         dialog.showAndWait();
+    }
+
+    private String loadSnippetFromFile(FindingRow row) {
+        try {
+            String rawPath = resolveFilePath(row.getFilePath());
+            if (rawPath == null || rawPath.isBlank()) return null;
+
+            java.nio.file.Path path = java.nio.file.Paths.get(rawPath);
+            if (!path.isAbsolute()) {
+                java.util.Optional<com.vulntriage.domain.Repository> repo =
+                    ctx.repositoryRepo().findById(row.getRepositoryId());
+                if (repo.isEmpty()) return null;
+                path = java.nio.file.Paths.get(repo.get().getLocalPath(), rawPath);
+            }
+            if (!java.nio.file.Files.exists(path)) return null;
+
+            java.util.List<String> lines = java.nio.file.Files.readAllLines(path);
+            int total = lines.size();
+            String lineStr = row.getLineStr();
+            Integer lineNum = null;
+            try { if (lineStr != null && !lineStr.isBlank()) lineNum = Integer.parseInt(lineStr.trim()); }
+            catch (NumberFormatException ignored) {}
+
+            if (lineNum != null && lineNum > 0) {
+                int target = lineNum - 1;
+                int start  = Math.max(0, target - 10);
+                int end    = Math.min(total - 1, target + 10);
+                StringBuilder sb = new StringBuilder();
+                for (int i = start; i <= end; i++) {
+                    sb.append(lines.get(i)).append('\n');
+                }
+                return sb.toString();
+            } else {
+                // No line number (Trivy): show first 20 lines
+                int end = Math.min(total - 1, 19);
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i <= end; i++) sb.append(lines.get(i)).append('\n');
+                if (total > 20) sb.append("... (").append(total - 20).append(" more lines)");
+                return sb.toString();
+            }
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String resolveFilePath(String rawPath) {
