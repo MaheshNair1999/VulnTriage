@@ -31,6 +31,7 @@ public class SemgrepAdapter implements ScannerAdapter {
 
     // Cached after first resolution so `where`/`which` only runs once per instance
     private String resolvedSemgrepPath = null;
+    private boolean useWsl = false;
 
     public SemgrepAdapter() {
         this.parser = new SemgrepOutputParser();
@@ -123,16 +124,11 @@ public class SemgrepAdapter implements ScannerAdapter {
     @Override
     public boolean isAvailable() {
         try {
-            // On Windows, ProcessBuilder does not always inherit the full user PATH
-            // (e.g. when launched from IntelliJ). We resolve the executable once and
-            // cache the result so subsequent calls (scan, buildCommand) don't re-run `where`.
-            String semgrepPath = semgrepPath();
-            Process p = new ProcessBuilder(semgrepPath, "--version")
-                .redirectErrorStream(true)
-                .start();
-            // 30-second timeout: Semgrep's Python/uv runtime can take 6-10 s on cold start
-            // (first launch after install or after a long idle). 5 s was too short and caused
-            // isAvailable() to return false on the first scan, silently skipping it.
+            semgrepPath(); // resolve and cache path + useWsl flag
+            List<String> cmd = useWsl
+                ? List.of("wsl", "semgrep", "--version")
+                : List.of(resolvedSemgrepPath, "--version");
+            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             return p.waitFor(30, TimeUnit.SECONDS) && p.exitValue() == 0;
         } catch (Exception e) {
             return false;
@@ -142,37 +138,98 @@ public class SemgrepAdapter implements ScannerAdapter {
     /** Returns the resolved semgrep path, computing it once and caching the result. */
     private synchronized String semgrepPath() {
         if (resolvedSemgrepPath != null) return resolvedSemgrepPath;
-        try {
-            boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
-            ProcessBuilder pb = isWindows
-                ? new ProcessBuilder("where", "semgrep")
-                : new ProcessBuilder("which", "semgrep");
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            if (p.waitFor(15, TimeUnit.SECONDS) && p.exitValue() == 0) {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(p.getInputStream()))) {
-                    String line = reader.readLine();
-                    if (line != null && !line.isBlank()) {
-                        resolvedSemgrepPath = line.trim();
-                        return resolvedSemgrepPath;
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        if (isWindows) {
+            // Try native semgrep first (works if installed via official binary).
+            // Fall back to WSL if native is missing or broken (e.g. pip-only install
+            // which lacks semgrep-core.exe).
+            try {
+                ProcessBuilder pb = new ProcessBuilder("where", "semgrep");
+                pb.redirectErrorStream(true);
+                Process p = pb.start();
+                if (p.waitFor(15, TimeUnit.SECONDS) && p.exitValue() == 0) {
+                    try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                        String line = r.readLine();
+                        if (line != null && !line.isBlank()) {
+                            String candidate = line.trim();
+                            // Verify the native install actually works
+                            Process test = new ProcessBuilder(candidate, "--version")
+                                .redirectErrorStream(true).start();
+                            if (test.waitFor(20, TimeUnit.SECONDS) && test.exitValue() == 0) {
+                                resolvedSemgrepPath = candidate;
+                                return resolvedSemgrepPath;
+                            }
+                        }
                     }
                 }
+            } catch (Exception ignored) {}
+            // Native not available or broken — try WSL
+            if (wslSemgrepAvailable()) {
+                useWsl = true;
+                resolvedSemgrepPath = "semgrep";
+                return resolvedSemgrepPath;
             }
-        } catch (Exception ignored) {}
-        resolvedSemgrepPath = "semgrep"; // fall back to bare name
+        } else {
+            try {
+                ProcessBuilder pb = new ProcessBuilder("which", "semgrep");
+                pb.redirectErrorStream(true);
+                Process p = pb.start();
+                if (p.waitFor(15, TimeUnit.SECONDS) && p.exitValue() == 0) {
+                    try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                        String line = r.readLine();
+                        if (line != null && !line.isBlank()) {
+                            resolvedSemgrepPath = line.trim();
+                            return resolvedSemgrepPath;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        resolvedSemgrepPath = "semgrep";
         return resolvedSemgrepPath;
+    }
+
+    private boolean wslSemgrepAvailable() {
+        try {
+            Process p = new ProcessBuilder("wsl", "semgrep", "--version")
+                .redirectErrorStream(true).start();
+            return p.waitFor(20, TimeUnit.SECONDS) && p.exitValue() == 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Converts a Windows path like C:\Users\foo to /mnt/c/Users/foo for WSL. */
+    private String toWslPath(String windowsPath) {
+        if (windowsPath == null) return windowsPath;
+        String p = windowsPath.replace('\\', '/');
+        if (p.length() >= 2 && p.charAt(1) == ':') {
+            char drive = Character.toLowerCase(p.charAt(0));
+            p = "/mnt/" + drive + p.substring(2);
+        }
+        return p;
     }
 
     private List<String> buildCommand(String repositoryPath, ScanConfig config) {
         List<String> cmd = new ArrayList<>();
-        cmd.add(semgrepPath());
-        cmd.add("scan");
-        cmd.add("--config");
-        cmd.add(config.getSemgrepRuleset());
-        cmd.add("--json");
-        cmd.add("--no-git-ignore");   // scan all files, not just tracked ones
-        cmd.add(repositoryPath);
+        if (useWsl) {
+            cmd.add("wsl");
+            cmd.add("semgrep");
+            cmd.add("scan");
+            cmd.add("--config");
+            cmd.add(config.getSemgrepRuleset());
+            cmd.add("--json");
+            cmd.add("--no-git-ignore");
+            cmd.add(toWslPath(repositoryPath));
+        } else {
+            cmd.add(semgrepPath());
+            cmd.add("scan");
+            cmd.add("--config");
+            cmd.add(config.getSemgrepRuleset());
+            cmd.add("--json");
+            cmd.add("--no-git-ignore");
+            cmd.add(repositoryPath);
+        }
         return cmd;
     }
 }
