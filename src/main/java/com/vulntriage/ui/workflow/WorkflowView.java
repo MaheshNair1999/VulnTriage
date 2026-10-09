@@ -763,6 +763,19 @@ public class WorkflowView {
     private void runWorkflow() {
         if (stepRows.isEmpty()) { setStatus("Add steps before running."); return; }
 
+        if (ctx.isScanRunning()) {
+            new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION,
+                "A scan is currently in progress. Please wait for it to finish before starting a workflow.")
+                .showAndWait();
+            return;
+        }
+        if (ctx.isTriageRunning()) {
+            new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION,
+                "A triage run is currently in progress. Please wait for it to finish before starting a workflow.")
+                .showAndWait();
+            return;
+        }
+
         // Pick a repository
         var repos = ctx.repositoryRepo().findAll();
         if (repos.isEmpty()) {
