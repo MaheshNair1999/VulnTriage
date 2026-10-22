@@ -2,10 +2,7 @@ package com.vulntriage.scanner;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.function.BiConsumer;
 
 /**
@@ -15,8 +12,9 @@ import java.util.function.BiConsumer;
  * the returned string is a human-readable status/result message (e.g. "Repo X: 12 findings
  * saved" or an error description). A per-task failure does <em>not</em> cancel other tasks.
  *
- * <p>Pool size is {@code min(4, tasks.size())} so a single-repo scan uses one thread
- * and large batches are capped at four concurrent scanners to avoid overwhelming the host.
+ * <p>Pool size is {@code min(availableProcessors, 8, tasks.size())} — scales to the
+ * host's CPU core count automatically, capped at 8 to avoid spawning excessive scanner
+ * processes on high-core-count machines.
  *
  * <p>This class is extracted from the UI layer so that coordination logic can be tested
  * headless without JavaFX. The {@code onResult} callback is invoked on the calling
@@ -25,8 +23,11 @@ import java.util.function.BiConsumer;
  */
 public class ParallelScanCoordinator {
 
-    /** Maximum concurrent scanner threads. */
-    static final int MAX_POOL_SIZE = 4;
+    /** Hard ceiling on concurrent scanner processes regardless of core count. */
+    static final int MAX_POOL_SIZE = 8;
+
+    /** Per-task timeout in minutes — prevents a hung scanner from blocking forever. */
+    static final long TASK_TIMEOUT_MINUTES = 30;
 
     /**
      * Run all {@code tasks} concurrently, invoking {@code onResult} for each one.
@@ -40,7 +41,8 @@ public class ParallelScanCoordinator {
                     BiConsumer<Integer, String> onResult) {
         if (tasks.isEmpty()) return;
 
-        int poolSize = Math.min(MAX_POOL_SIZE, tasks.size());
+        int cores    = Runtime.getRuntime().availableProcessors();
+        int poolSize = Math.min(Math.min(cores, MAX_POOL_SIZE), tasks.size());
         ExecutorService executor = Executors.newFixedThreadPool(poolSize);
 
         List<Future<String>> futures = new ArrayList<>(tasks.size());
@@ -52,7 +54,10 @@ public class ParallelScanCoordinator {
         for (int i = 0; i < futures.size(); i++) {
             String result;
             try {
-                result = futures.get(i).get();
+                result = futures.get(i).get(TASK_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+            } catch (TimeoutException e) {
+                futures.get(i).cancel(true);
+                result = "ERROR: Scan timed out after " + TASK_TIMEOUT_MINUTES + " minutes";
             } catch (Exception e) {
                 // Per-repo failure — report it but do not cancel sibling tasks
                 Throwable cause = (e.getCause() != null) ? e.getCause() : e;

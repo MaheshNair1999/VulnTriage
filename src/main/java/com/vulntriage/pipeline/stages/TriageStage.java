@@ -1,5 +1,6 @@
 package com.vulntriage.pipeline.stages;
 
+import com.vulntriage.config.AppConfig;
 import com.vulntriage.domain.EvaluationRun;
 import com.vulntriage.domain.Finding;
 import com.vulntriage.domain.LlmResult;
@@ -15,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Stage 3: Run LLM-assisted triage on the sampled findings.
@@ -100,80 +103,113 @@ public class TriageStage extends AbstractPipelineStage {
             return;
         }
 
-        // Create evaluation run to group results
         EvaluationRun run = new EvaluationRun(runName,
             "LLM triage using " + strategy.getModelName()
             + " on " + sample.size() + " findings");
         evalRepo.save(run);
-
-        // Save which findings are in this sample
         sample.forEach(f -> evalRepo.saveSampleFinding(run.getId(), f.getId()));
 
-        log.info("TriageStage: processing {} findings with {}",
-            sample.size(), strategy.getModelName());
+        int configuredThreads = AppConfig.getInstance().getTriageConcurrency();
+        log.info("TriageStage: processing {} findings with {} (concurrency={})",
+            sample.size(), strategy.getModelName(), configuredThreads);
 
         boolean useTemplate = promptTemplateStr != null && !promptTemplateStr.isBlank();
-
         com.vulntriage.app.AppContext appCtx = com.vulntriage.app.AppContext.getInstance();
 
-        int processed = 0;
+        AtomicInteger processed   = new AtomicInteger(0);
+        AtomicInteger concurrency = new AtomicInteger(configuredThreads);
+
+        // Single writer thread keeps DB access serial and contention-free
+        BlockingQueue<LlmResult> writeQueue = new LinkedBlockingQueue<>();
+        Thread dbWriter = new Thread(() -> {
+            while (true) {
+                try {
+                    LlmResult r = writeQueue.poll(2, TimeUnit.SECONDS);
+                    if (r == null) {
+                        if (Thread.currentThread().isInterrupted()) break;
+                        continue;
+                    }
+                    // sentinel
+                    if (r.getFindingId() == -1) break;
+                    llmRepo.save(r);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }, "triage-db-writer");
+        dbWriter.setDaemon(true);
+        dbWriter.start();
+
+        ExecutorService pool = Executors.newFixedThreadPool(configuredThreads,
+            r -> { Thread t = new Thread(r, "triage-worker"); t.setDaemon(true); return t; });
+
+        List<Future<?>> futures = new java.util.ArrayList<>(sample.size());
+
         for (Finding finding : sample) {
-            if (Thread.currentThread().isInterrupted() || appCtx.isStopRequested()) {
-                log.info("TriageStage: stop requested — stopping triage early");
-                break;
-            }
-            try {
-                TriageResult result = useTemplate
-                    ? strategy.triageWithTemplate(finding, promptTemplateStr, promptVersion, null)
-                    : strategy.triage(finding);
+            if (appCtx.isStopRequested()) break;
 
-                LlmResult llmResult = new LlmResult();
-                llmResult.setFindingId      (finding.getId());
-                llmResult.setEvaluationRunId(run.getId());
-                llmResult.setLlmVerdict     (result.getVerdict());
-                llmResult.setConfidence     (result.getConfidence());
-                llmResult.setReasoning      (result.getReasoning());
-                llmResult.setRemediation    (result.getRemediation());
-                llmResult.setModelUsed      (strategy.getModelName());
-                llmResult.setPromptVersion  (result.getPromptVersion());
-                llmRepo.save(llmResult);
+            futures.add(pool.submit(() -> {
+                if (appCtx.isStopRequested() || Thread.currentThread().isInterrupted()) return;
 
-            } catch (Exception e) {
-                log.warn("Failed to triage finding id={}: {}", finding.getId(), e.getMessage());
-                if (Thread.currentThread().isInterrupted() || appCtx.isStopRequested()) {
-                    log.info("TriageStage: stop requested after failed triage call — stopping");
-                    break;
-                }
-            }
-
-            processed++;
-            int progress = 50 + (int) ((double) processed / sample.size() * 35);
-            emit(PipelineEvent.findingProcessed(progress));
-
-            // Inter-request delay — gives GPU time to cool between inference calls
-            if (delayMs > 0 && processed < sample.size()) {
                 try {
-                    Thread.sleep(delayMs);
+                    TriageResult result = useTemplate
+                        ? strategy.triageWithTemplate(finding, promptTemplateStr, promptVersion, null)
+                        : strategy.triage(finding);
+
+                    LlmResult llmResult = new LlmResult();
+                    llmResult.setFindingId      (finding.getId());
+                    llmResult.setEvaluationRunId(run.getId());
+                    llmResult.setLlmVerdict     (result.getVerdict());
+                    llmResult.setConfidence     (result.getConfidence());
+                    llmResult.setReasoning      (result.getReasoning());
+                    llmResult.setRemediation    (result.getRemediation());
+                    llmResult.setModelUsed      (strategy.getModelName());
+                    llmResult.setPromptVersion  (result.getPromptVersion());
+                    writeQueue.put(llmResult);
+
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
-                    log.warn("Triage interrupted during delay");
-                    break;
+                } catch (Exception e) {
+                    // Auto-backoff: if a worker fails and concurrency > 1, drop by 1
+                    int cur = concurrency.get();
+                    if (cur > 1) {
+                        int next = concurrency.decrementAndGet();
+                        log.warn("Triage worker failed for finding id={} — backing off to {} thread(s): {}",
+                            finding.getId(), next, e.getMessage());
+                    } else {
+                        log.warn("Failed to triage finding id={}: {}", finding.getId(), e.getMessage());
+                    }
                 }
-            }
 
-            // Extra cooldown every 50 findings — longer pause to let VRAM settle
-            if (processed % 50 == 0 && processed < sample.size()) {
-                log.info("TriageStage: cooldown pause after {} findings", processed);
-                try {
-                    Thread.sleep(10_000); // 10 seconds every 50 findings
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    break;
+                int done = processed.incrementAndGet();
+                int progress = 50 + (int) ((double) done / sample.size() * 35);
+                emit(PipelineEvent.findingProcessed(progress));
+
+                // Inter-request delay only when running sequentially (concurrency=1)
+                if (delayMs > 0 && concurrency.get() == 1 && done < sample.size()) {
+                    try { Thread.sleep(delayMs); }
+                    catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
                 }
-            }
+            }));
         }
 
-        log.info("TriageStage complete: {}/{} findings processed", processed, sample.size());
+        pool.shutdown();
+        try {
+            pool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            pool.shutdownNow();
+        }
+
+        // Signal DB writer to finish and wait for it
+        LlmResult sentinel = new LlmResult();
+        sentinel.setFindingId(-1);
+        writeQueue.offer(sentinel);
+        try { dbWriter.join(10_000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+
+        log.info("TriageStage complete: {}/{} findings processed (final concurrency={})",
+            processed.get(), sample.size(), concurrency.get());
         ctx.setEvaluationRun(run);
     }
 }

@@ -19,13 +19,14 @@ public class AppConfig {
 
     private static final Logger log = LoggerFactory.getLogger(AppConfig.class);
 
-    public static final String OLLAMA_URL    = "ollama.url";
-    public static final String OLLAMA_MODEL  = "ollama.model";
-    public static final String TRIAGE_DELAY  = "triage.delay_ms";
-    public static final String DARK_MODE     = "app.dark_mode";
-    public static final String LLM_PROVIDER  = "llm.provider";
-    public static final String LLM_API_KEY   = "llm.api_key";
-    public static final String LLM_MODEL     = "llm.model";
+    public static final String OLLAMA_URL        = "ollama.url";
+    public static final String OLLAMA_MODEL      = "ollama.model";
+    public static final String TRIAGE_DELAY      = "triage.delay_ms";
+    public static final String DARK_MODE         = "app.dark_mode";
+    public static final String LLM_PROVIDER      = "llm.provider";
+    public static final String LLM_API_KEY       = "llm.api_key";
+    public static final String LLM_MODEL         = "llm.model";
+    public static final String TRIAGE_CONCURRENCY = "triage.concurrency";
 
     private static final String DEFAULT_OLLAMA_URL   = "http://localhost:11434";
     private static final String DEFAULT_OLLAMA_MODEL = "qwen2.5:3b";
@@ -99,6 +100,16 @@ public class AppConfig {
     public void saveTriageDelay(int delayMs) {
         set(TRIAGE_DELAY, String.valueOf(delayMs));
         log.info("Saved triage delay: {}ms", delayMs);
+    }
+
+    public int getTriageConcurrency() {
+        try { return Integer.parseInt(get(TRIAGE_CONCURRENCY, "1")); }
+        catch (NumberFormatException e) { return 1; }
+    }
+
+    public void saveTriageConcurrency(int threads) {
+        set(TRIAGE_CONCURRENCY, String.valueOf(Math.max(1, Math.min(8, threads))));
+        log.info("Saved triage concurrency: {} threads", threads);
     }
 
     public boolean isDarkMode() {

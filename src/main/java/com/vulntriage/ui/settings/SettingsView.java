@@ -23,6 +23,8 @@ public class SettingsView {
     private TextField     urlField;
     private TextField     modelField;
     private TextField     delayField;
+    private Slider        concurrencySlider;
+    private Label         concurrencyValueLabel;
 
     // Cloud fields
     private PasswordField apiKeyField;
@@ -87,12 +89,42 @@ public class SettingsView {
         modelField = field(ctx.getOllamaModel());
         delayField = field(String.valueOf(cfg.getTriageDelayMs()));
 
+        // Concurrency slider (1–8)
+        int savedConcurrency = cfg.getTriageConcurrency();
+        concurrencySlider = new Slider(1, 8, savedConcurrency);
+        concurrencySlider.setBlockIncrement(1);
+        concurrencySlider.setMajorTickUnit(1);
+        concurrencySlider.setMinorTickCount(0);
+        concurrencySlider.setSnapToTicks(true);
+        concurrencySlider.setShowTickMarks(true);
+        concurrencySlider.setShowTickLabels(true);
+        concurrencySlider.setMaxWidth(Double.MAX_VALUE);
+
+        concurrencyValueLabel = new Label(savedConcurrency + " thread" + (savedConcurrency > 1 ? "s" : ""));
+        concurrencyValueLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+        concurrencySlider.valueProperty().addListener((obs, oldV, newV) -> {
+            int val = newV.intValue();
+            concurrencyValueLabel.setText(val + " thread" + (val > 1 ? "s" : ""));
+        });
+
+        HBox sliderRow = new HBox(10, concurrencySlider, concurrencyValueLabel);
+        HBox.setHgrow(concurrencySlider, Priority.ALWAYS);
+        sliderRow.setAlignment(Pos.CENTER_LEFT);
+
+        Label concurrencyWarning = new Label(
+            "⚠  Higher values speed up triage but require more VRAM. "
+            + "Start at 1 (safe default). Increase only if your GPU has spare VRAM after loading the model.");
+        concurrencyWarning.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
+        concurrencyWarning.setWrapText(true);
+
         GridPane ollamaGrid = new GridPane();
         ollamaGrid.setHgap(16); ollamaGrid.setVgap(12);
         ollamaGrid.getColumnConstraints().addAll(new ColumnConstraints(130), fc);
-        ollamaGrid.addRow(0, label("Ollama URL"),  urlField);
-        ollamaGrid.addRow(1, label("Model Name"),  modelField);
-        ollamaGrid.addRow(2, label("Delay (ms)"),  delayField);
+        ollamaGrid.addRow(0, label("Ollama URL"),      urlField);
+        ollamaGrid.addRow(1, label("Model Name"),      modelField);
+        ollamaGrid.addRow(2, label("Delay (ms)"),      delayField);
+        ollamaGrid.addRow(3, label("Parallelism"),     sliderRow);
+        ollamaGrid.addRow(4, new Label(""),            concurrencyWarning);
 
         Label ollamaHint = new Label("Install Ollama from ollama.ai — then run: ollama pull qwen3:14b");
         ollamaHint.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
@@ -267,8 +299,10 @@ public class SettingsView {
             } catch (NumberFormatException e) {
                 err("Delay must be a non-negative integer (milliseconds)."); return;
             }
+            int threads = (int) concurrencySlider.getValue();
+            cfg.saveTriageConcurrency(threads);
             ctx.enableOllama(url, model);
-            ok("Ollama enabled — " + model + " at " + url);
+            ok("Ollama enabled — " + model + " at " + url + " (parallelism: " + threads + ")");
         } else {
             String apiKey = apiKeyField.getText().trim();
             String model  = cloudModelField.getText().trim();

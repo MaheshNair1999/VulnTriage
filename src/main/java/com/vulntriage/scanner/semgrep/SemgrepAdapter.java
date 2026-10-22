@@ -9,11 +9,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * Adapter pattern implementation for Semgrep (SAST).
@@ -51,37 +52,21 @@ public class SemgrepAdapter implements ScannerAdapter {
 
         List<String> command = buildCommand(repositoryPath, config);
 
+        // Redirect output to temp files to avoid pipe-blocking issues on Windows/WSL.
+        // When reading via pipes, WSL keeps stdout open even after semgrep exits,
+        // causing reader threads to block indefinitely. File redirection sidesteps this.
+        File stdoutFile = null;
+        File stderrFile = null;
         try {
+            stdoutFile = File.createTempFile("semgrep-out-", ".json");
+            stderrFile = File.createTempFile("semgrep-err-", ".txt");
+
             ProcessBuilder pb = new ProcessBuilder(command);
-            pb.redirectErrorStream(false); // keep stderr separate from stdout
+            pb.redirectOutput(stdoutFile);
+            pb.redirectError(stderrFile);
             Process process = pb.start();
 
-            // Read stdout (JSON) and stderr (progress/errors) concurrently
-            // to avoid the process blocking on full buffers
-            StringBuilder stdout = new StringBuilder();
-            StringBuilder stderr = new StringBuilder();
-
-            Thread stdoutReader = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getInputStream()))) {
-                    reader.lines().forEach(line -> stdout.append(line).append("\n"));
-                } catch (Exception ignored) {}
-            });
-
-            Thread stderrReader = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getErrorStream()))) {
-                    reader.lines().forEach(line -> stderr.append(line).append("\n"));
-                } catch (Exception ignored) {}
-            });
-
-            stdoutReader.start();
-            stderrReader.start();
-
             boolean finished = process.waitFor(config.getTimeoutSeconds(), TimeUnit.SECONDS);
-
-            stdoutReader.join(5000);
-            stderrReader.join(5000);
 
             if (!finished) {
                 process.destroyForcibly();
@@ -93,17 +78,17 @@ public class SemgrepAdapter implements ScannerAdapter {
             int exitCode = process.exitValue();
             log.debug("Semgrep exit code: {}", exitCode);
 
-            if (stderr.length() > 0) {
-                log.warn("Semgrep stderr: {}", stderr.toString().trim());
+            String stderrContent = Files.readString(stderrFile.toPath()).trim();
+            if (!stderrContent.isEmpty()) {
+                log.warn("Semgrep stderr: {}", stderrContent);
             }
 
-            String output = stdout.toString().trim();
+            String output = Files.readString(stdoutFile.toPath()).trim();
             if (output.isEmpty()) {
                 log.warn("Semgrep produced no output (exit code {})", exitCode);
                 return new ArrayList<>();
             }
 
-            // Tell the parser where the repo is so it can read files directly
             parser.setRepositoryPath(repositoryPath);
             List<RawFinding> findings = parser.parse(output);
             log.info("Semgrep scan complete: {} findings found", findings.size());
@@ -113,6 +98,9 @@ public class SemgrepAdapter implements ScannerAdapter {
             throw e;
         } catch (Exception e) {
             throw new ScannerException("Semgrep scan failed: " + e.getMessage(), e);
+        } finally {
+            if (stdoutFile != null) stdoutFile.delete();
+            if (stderrFile != null) stderrFile.delete();
         }
     }
 
@@ -213,24 +201,25 @@ public class SemgrepAdapter implements ScannerAdapter {
     private List<String> buildCommand(String repositoryPath, ScanConfig config) {
         semgrepPath(); // ensure useWsl is resolved before we read it
         List<String> cmd = new ArrayList<>();
-        if (useWsl) {
-            cmd.add("wsl");
-            cmd.add("semgrep");
-            cmd.add("scan");
-            cmd.add("--config");
-            cmd.add(config.getSemgrepRuleset());
-            cmd.add("--json");
-            cmd.add("--no-git-ignore");
-            cmd.add(toWslPath(repositoryPath));
-        } else {
-            cmd.add(semgrepPath());
-            cmd.add("scan");
-            cmd.add("--config");
-            cmd.add(config.getSemgrepRuleset());
-            cmd.add("--json");
-            cmd.add("--no-git-ignore");
-            cmd.add(repositoryPath);
+        String semgrep = useWsl ? "semgrep" : semgrepPath();
+        if (useWsl) cmd.add("wsl");
+        cmd.add(semgrep);
+        cmd.add("scan");
+        cmd.add("--config");
+        cmd.add(config.getSemgrepRuleset());
+        cmd.add("--json");
+        cmd.add("--no-git-ignore");
+        // Per-file timeout: prevents one complex file from blocking the whole scan
+        cmd.add("--timeout");
+        cmd.add("30");
+        // Skip common non-source directories that massively slow down scanning
+        for (String exc : new String[]{
+                "node_modules", ".git", "__pycache__", ".tox", ".eggs",
+                "*.min.js", "vendor", "dist", "build", ".venv", "venv"}) {
+            cmd.add("--exclude");
+            cmd.add(exc);
         }
+        cmd.add(useWsl ? toWslPath(repositoryPath) : repositoryPath);
         return cmd;
     }
 }
