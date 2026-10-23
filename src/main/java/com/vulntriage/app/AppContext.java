@@ -130,16 +130,19 @@ public class AppContext {
         this.triageStrategy = new MockTriageStrategy();
     }
 
-    // ── Triage state (observable so sidebar can show indicator) ───────────
+    // ── Triage state (per-repo; aggregate property drives sidebar indicator) ─
+    private final java.util.Set<Long> triagingRepos =
+        java.util.Collections.synchronizedSet(new java.util.HashSet<>());
     private final javafx.beans.property.BooleanProperty triageRunning =
         new javafx.beans.property.SimpleBooleanProperty(false);
 
-    public javafx.beans.property.BooleanProperty triageRunningProperty() {
-        return triageRunning;
-    }
-    public boolean isTriageRunning() { return triageRunning.get(); }
-    public void setTriageRunning(boolean running) {
-        javafx.application.Platform.runLater(() -> triageRunning.set(running));
+    public javafx.beans.property.BooleanProperty triageRunningProperty() { return triageRunning; }
+    public boolean isTriageRunning()            { return !triagingRepos.isEmpty(); }
+    public boolean isTriageRunning(long repoId) { return triagingRepos.contains(repoId); }
+    public void setTriageRunning(long repoId, boolean running) {
+        if (running) triagingRepos.add(repoId);
+        else         triagingRepos.remove(repoId);
+        javafx.application.Platform.runLater(() -> triageRunning.set(!triagingRepos.isEmpty()));
     }
 
     // ── Workflow state ─────────────────────────────────────────────────────
@@ -166,16 +169,19 @@ public class AppContext {
         javafx.application.Platform.runLater(() -> darkMode.set(dark));
     }
 
-    // ── Scan state ─────────────────────────────────────────────────────────
+    // ── Scan state (per-repo; aggregate property drives sidebar indicator) ──
+    private final java.util.Set<Long> scanningRepos =
+        java.util.Collections.synchronizedSet(new java.util.HashSet<>());
     private final javafx.beans.property.BooleanProperty scanRunning =
         new javafx.beans.property.SimpleBooleanProperty(false);
 
-    public javafx.beans.property.BooleanProperty scanRunningProperty() {
-        return scanRunning;
-    }
-    public boolean isScanRunning() { return scanRunning.get(); }
-    public void setScanRunning(boolean running) {
-        javafx.application.Platform.runLater(() -> scanRunning.set(running));
+    public javafx.beans.property.BooleanProperty scanRunningProperty() { return scanRunning; }
+    public boolean isScanRunning()            { return !scanningRepos.isEmpty(); }
+    public boolean isScanRunning(long repoId) { return scanningRepos.contains(repoId); }
+    public void setScanRunning(long repoId, boolean running) {
+        if (running) scanningRepos.add(repoId);
+        else         scanningRepos.remove(repoId);
+        javafx.application.Platform.runLater(() -> scanRunning.set(!scanningRepos.isEmpty()));
     }
 
     // ── Clone state ────────────────────────────────────────────────────────

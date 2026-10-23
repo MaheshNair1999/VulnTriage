@@ -763,27 +763,13 @@ public class WorkflowView {
     private void runWorkflow() {
         if (stepRows.isEmpty()) { setStatus("Add steps before running."); return; }
 
-        if (ctx.isScanRunning()) {
-            new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION,
-                "A scan is currently in progress. Please wait for it to finish before starting a workflow.")
-                .showAndWait();
-            return;
-        }
-        if (ctx.isTriageRunning()) {
-            new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION,
-                "A triage run is currently in progress. Please wait for it to finish before starting a workflow.")
-                .showAndWait();
-            return;
-        }
-
-        // Pick a repository
+        // Pick a repository first so we can check per-repo busy state
         var repos = ctx.repositoryRepo().findAll();
         if (repos.isEmpty()) {
             setStatus("No repositories found. Add one in the Repositories screen first.");
             return;
         }
 
-        // Simple repo picker if multiple
         com.vulntriage.domain.Repository repo;
         if (repos.size() == 1) {
             repo = repos.get(0);
@@ -795,6 +781,19 @@ public class WorkflowView {
             Optional<com.vulntriage.domain.Repository> chosen = picker.showAndWait();
             if (chosen.isEmpty()) return;
             repo = chosen.get();
+        }
+
+        if (ctx.isScanRunning(repo.getId())) {
+            new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION,
+                "A scan is already running for \"" + repo.getName() + "\". Please wait for it to finish.")
+                .showAndWait();
+            return;
+        }
+        if (ctx.isTriageRunning(repo.getId())) {
+            new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION,
+                "A triage run is already in progress for \"" + repo.getName() + "\". Please wait for it to finish.")
+                .showAndWait();
+            return;
         }
 
         WorkflowDefinition def;

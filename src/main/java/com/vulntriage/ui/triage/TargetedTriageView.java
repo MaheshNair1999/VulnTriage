@@ -606,7 +606,10 @@ public class TargetedTriageView {
         resultRows.clear();
         showResultsPanel();
         setRunningState(true, startMsg);
-        ctx.setTriageRunning(true);
+        java.util.Set<Long> triagingIds = finalSample.stream()
+            .map(com.vulntriage.domain.Finding::getRepositoryId)
+            .collect(java.util.stream.Collectors.toSet());
+        triagingIds.forEach(id -> ctx.setTriageRunning(id, true));
 
         final Map<Long, String> repoNameSnap = new HashMap<>(findingRepoName);
         final Map<Long, String> repoPathSnap = new HashMap<>(repoLocalPathById);
@@ -736,15 +739,15 @@ public class TargetedTriageView {
         };
 
         currentTask.setOnSucceeded(e -> Platform.runLater(() -> {
-            ctx.setTriageRunning(false);
+            triagingIds.forEach(id -> ctx.setTriageRunning(id, false));
             setRunningState(false, "Done. " + resultRows.size() + " findings triaged — check Evaluate for metrics.");
         }));
         currentTask.setOnFailed(e -> Platform.runLater(() -> {
-            ctx.setTriageRunning(false);
+            triagingIds.forEach(id -> ctx.setTriageRunning(id, false));
             setRunningState(false, "Failed: " + currentTask.getException().getMessage());
         }));
         currentTask.setOnCancelled(e -> Platform.runLater(() -> {
-            ctx.setTriageRunning(false);
+            triagingIds.forEach(id -> ctx.setTriageRunning(id, false));
             setRunningState(false, "Stopped. Results saved so far.");
         }));
 
@@ -799,7 +802,7 @@ public class TargetedTriageView {
     private void stopTriage() {
         if (currentTask != null && currentTask.isRunning()) {
             currentTask.cancel(true);
-            ctx.setTriageRunning(false);
+            // setTriageRunning per-repo is handled by the onCancelled handler above
             setRunningState(false, "Stopped — results saved so far.");
         }
     }

@@ -380,7 +380,8 @@ public class RepositoryView {
             .collect(java.util.stream.Collectors.joining(", "));
         cancelRequested.set(false);
         setScanningState(true, "Scanning " + repoNames + "…");
-        ctx.setScanRunning(true);
+        List<Long> scanningIds = repos.stream().map(Repository::getId).toList();
+        scanningIds.forEach(id -> ctx.setScanRunning(id, true));
 
         // Build per-repo scan callables for parallel execution
         List<Callable<String>> scanCallables = new ArrayList<>();
@@ -417,14 +418,14 @@ public class RepositoryView {
             Platform.runLater(() -> setStatus(msg)));
 
         scanTask.setOnSucceeded(e -> Platform.runLater(() -> {
-            ctx.setScanRunning(false);
+            scanningIds.forEach(id -> ctx.setScanRunning(id, false));
             String msg = cancelRequested.get() ? "Scan stopped." : "Scan complete for: " + repoNames;
             setScanningState(false, msg);
             refresh();
         }));
 
         scanTask.setOnFailed(e -> Platform.runLater(() -> {
-            ctx.setScanRunning(false);
+            scanningIds.forEach(id -> ctx.setScanRunning(id, false));
             Throwable ex = scanTask.getException();
             setScanningState(false, "Scan failed: " + ex.getMessage());
             showError("Scan failed", ex.getMessage());
