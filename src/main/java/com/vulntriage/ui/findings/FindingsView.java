@@ -4,9 +4,9 @@ import com.vulntriage.app.AppContext;
 import com.vulntriage.ui.UIUtils;
 import com.vulntriage.domain.Finding;
 import com.vulntriage.domain.Repository;
+import javafx.animation.PauseTransition;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 import javafx.collections.transformation.SortedList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -15,11 +15,14 @@ import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
+import javafx.util.Duration;
 
 import javafx.scene.control.SelectionMode;
 import javafx.scene.input.KeyCode;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,31 +38,40 @@ import static com.vulntriage.config.ThemeColors.*;
  */
 public class FindingsView {
 
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM HH:mm");
-
+    private static final DateTimeFormatter DATE_FMT  = DateTimeFormatter.ofPattern("dd MMM HH:mm");
+    private static final int               PAGE_SIZE  = 500;
 
     // Sentinel value for "All Repositories" option
     private static final long ALL_REPOS = -1L;
 
     private final AppContext ctx = AppContext.getInstance();
     private ObservableList<FindingRow> allRows;
-    private FilteredList<FindingRow>   filteredRows;
     private SortedList<FindingRow>     sortedRows;
     private Label   statusLabel;
     private Label   countLabel;
     private Label   selectionLabel;
     private Button  refreshBtn;
     private Button  deleteBtn;
+    private Button  prevBtn;
+    private Button  nextBtn;
     private TableView<FindingRow> table;
 
     // Keep a reference so doRefresh can repopulate repo options
     private ComboBox<RepoOption> repoFilter;
 
+    // Pagination state — keyset cursor stack for O(1) prev/next
+    private long           afterId    = 0L;
+    private final Deque<Long> pageStack = new ArrayDeque<>();
+    // Active filter state (mirrors the toolbar widgets, updated on each loadPage call)
+    private long   activeRepoId   = ALL_REPOS;
+    private String activeSev      = null;
+    private String activeScanner  = null;
+    private String activeSearch   = null;
+
     public Node build() {
-        allRows      = FXCollections.observableArrayList();
-        filteredRows = new FilteredList<>(allRows, r -> true);
-        sortedRows   = new SortedList<>(filteredRows);
-        loadFindings();
+        allRows    = FXCollections.observableArrayList();
+        sortedRows = new SortedList<>(allRows);
+        loadPage();
 
         BorderPane root = new BorderPane();
         root.setStyle("-fx-background-color: " + BG + ";");
@@ -96,50 +108,65 @@ public class FindingsView {
         populateRepoFilter();
 
         // Scanner filter
-        ComboBox<String> scannerFilter = new ComboBox<>();
+        scannerFilter = new ComboBox<>();
         scannerFilter.getItems().addAll("All Scanners", "SEMGREP", "TRIVY", "GITLEAKS", "CODEQL", "SONARQUBE");
         scannerFilter.setValue("All Scanners");
         scannerFilter.setStyle("-fx-font-size: 12px;");
 
         // Severity filter
-        ComboBox<String> severityFilter = new ComboBox<>();
+        severityFilter = new ComboBox<>();
         severityFilter.getItems().addAll("All Severities", "ERROR", "WARNING", "INFO");
         severityFilter.setValue("All Severities");
         severityFilter.setStyle("-fx-font-size: 12px;");
 
         // Search field
-        TextField search = new TextField();
+        search = new TextField();
         search.setPromptText("Search rule, file, category…");
         search.setPrefWidth(220);
         search.setStyle("-fx-font-size: 12px; -fx-background-radius: 6px; "
             + "-fx-border-radius: 6px; -fx-border-color: " + BORDER + "; -fx-padding: 6 10;");
 
-        // Wire all filters together
+        // Wire all filters — each change resets to page 1 and queries the DB
         Runnable applyFilter = () -> {
-            RepoOption selectedRepo = repoFilter.getValue();
-            long repoId = selectedRepo != null ? selectedRepo.id() : ALL_REPOS;
-            String sev     = severityFilter.getValue();
-            String scanner = scannerFilter.getValue();
-            String query   = search.getText().toLowerCase().trim();
-
-            filteredRows.setPredicate(row -> {
-                boolean repoOk    = repoId == ALL_REPOS || row.getRepositoryId() == repoId;
-                boolean sevOk     = sev.equals("All Severities") || row.getSeverity().equals(sev);
-                boolean scannerOk = scanner.equals("All Scanners") || row.getSource().equals(scanner);
-                boolean qOk       = query.isEmpty()
-                    || row.getRuleId().toLowerCase().contains(query)
-                    || row.getFilePath().toLowerCase().contains(query)
-                    || row.getCategory().toLowerCase().contains(query)
-                    || row.getMessage().toLowerCase().contains(query);
-                return repoOk && sevOk && scannerOk && qOk;
-            });
-            updateStatus();
+            pageStack.clear();
+            afterId = 0L;
+            loadPage();
         };
+
+        // 300 ms debounce on search to avoid a DB query per keypress
+        PauseTransition debounce = new PauseTransition(Duration.millis(300));
+        debounce.setOnFinished(e -> applyFilter.run());
 
         repoFilter.setOnAction(e -> applyFilter.run());
         scannerFilter.setOnAction(e -> applyFilter.run());
         severityFilter.setOnAction(e -> applyFilter.run());
-        search.textProperty().addListener((o, old, n) -> applyFilter.run());
+        search.textProperty().addListener((o, old, n) -> { debounce.stop(); debounce.play(); });
+
+        // Prev / Next pagination buttons
+        prevBtn = new Button("← Prev");
+        prevBtn.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + DIM + "; "
+            + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 6 14; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6px;");
+        prevBtn.setDisable(true);
+        prevBtn.setOnAction(e -> {
+            if (!pageStack.isEmpty()) {
+                afterId = pageStack.pop();
+                loadPage();
+            }
+        });
+
+        nextBtn = new Button("Next →");
+        nextBtn.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + DIM + "; "
+            + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 6 14; "
+            + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6px;");
+        nextBtn.setDisable(true);
+        nextBtn.setOnAction(e -> {
+            if (!allRows.isEmpty()) {
+                pageStack.push(afterId);
+                afterId = allRows.get(allRows.size() - 1).getId();
+                loadPage();
+            }
+        });
 
         refreshBtn = new Button("↻  Refresh");
         refreshBtn.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + DIM + "; "
@@ -162,7 +189,7 @@ public class FindingsView {
         deleteBtn.setManaged(false);
         deleteBtn.setOnAction(e -> deleteSelected());
 
-        bar.getChildren().addAll(titleBlock, spacer, selectionLabel, deleteBtn, repoFilter, scannerFilter, severityFilter, search, refreshBtn);
+        bar.getChildren().addAll(titleBlock, spacer, selectionLabel, deleteBtn, repoFilter, scannerFilter, severityFilter, search, prevBtn, nextBtn, refreshBtn);
         return bar;
     }
 
@@ -190,56 +217,10 @@ public class FindingsView {
     // ── Refresh with spinner animation ────────────────────────────────────
 
     private void doRefresh(Runnable applyFilter) {
-        refreshBtn.setDisable(true);
-        refreshBtn.setText("↻  Loading…");
-        refreshBtn.setStyle("-fx-background-color: " + BTN_BG_SECONDARY + "; -fx-text-fill: " + ACCENT + "; "
-            + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 6 14; "
-            + "-fx-border-color: " + BTN_BORDER_SECONDARY + "; -fx-border-radius: 6px;");
-
-        javafx.animation.Timeline spinner = new javafx.animation.Timeline(
-            new javafx.animation.KeyFrame(javafx.util.Duration.millis(200), ev -> {
-                String current = refreshBtn.getText();
-                String[] frames = {"↻  Loading…", "↺  Loading…"};
-                refreshBtn.setText(current.startsWith("↻") ? frames[1] : frames[0]);
-            })
-        );
-        spinner.setCycleCount(javafx.animation.Animation.INDEFINITE);
-        spinner.play();
-
-        Task<Void> task = new Task<>() {
-            @Override
-            protected Void call() {
-                javafx.application.Platform.runLater(() -> {
-                    loadFindings();
-                    populateRepoFilter();
-                    applyFilter.run();
-                });
-                return null;
-            }
-        };
-
-        task.setOnSucceeded(e -> {
-            spinner.stop();
-            refreshBtn.setText("↻  Refresh");
-            refreshBtn.setStyle("-fx-background-color: " + SURFACE + "; -fx-text-fill: " + DIM + "; "
-                + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 6 14; "
-                + "-fx-border-color: " + BORDER + "; -fx-border-radius: 6px;");
-            refreshBtn.setDisable(false);
-            updateStatus();
-        });
-
-        task.setOnFailed(e -> {
-            spinner.stop();
-            refreshBtn.setText("↻  Refresh");
-            refreshBtn.setStyle("-fx-background-color: " + RED_LIGHT_BG + "; -fx-text-fill: #DC2626; "
-                + "-fx-background-radius: 6px; -fx-font-size: 12px; -fx-padding: 6 14; "
-                + "-fx-border-color: " + RED_BORDER + "; -fx-border-radius: 6px;");
-            refreshBtn.setDisable(false);
-        });
-
-        Thread t = new Thread(task, "findings-refresh");
-        t.setDaemon(true);
-        t.start();
+        populateRepoFilter();
+        pageStack.clear();
+        afterId = 0L;
+        applyFilter.run();
     }
 
     // ── Table ──────────────────────────────────────────────────────────────
@@ -591,22 +572,62 @@ public class FindingsView {
         return bar;
     }
 
-    // ── Data loading ───────────────────────────────────────────────────────
+    // ── Data loading (paginated) ───────────────────────────────────────────
 
-    private void loadFindings() {
-        allRows.clear();
-        int[] counter = {1};
-        ctx.repositoryRepo().findAll().forEach(repo -> {
-            Map<Long, String> scanDates = new HashMap<>();
-            ctx.scanRunRepo().findByRepositoryId(repo.getId()).forEach(sr ->
-                scanDates.put(sr.getId(), sr.getStartedAt() != null
-                    ? sr.getStartedAt().format(DATE_FMT) : "—")
-            );
-            ctx.findingRepo().findByRepositoryId(repo.getId()).forEach(f ->
-                allRows.add(toRow(counter[0]++, f, repo.getName(), scanDates))
-            );
+    private void loadPage() {
+        RepoOption selectedRepo = repoFilter != null ? repoFilter.getValue() : null;
+        activeRepoId  = (selectedRepo != null && selectedRepo.id() != ALL_REPOS) ? selectedRepo.id() : -1L;
+        activeSev     = (severityFilter != null && !"All Severities".equals(severityFilter.getValue()))
+                        ? severityFilter.getValue() : null;
+        activeScanner = (scannerFilter  != null && !"All Scanners".equals(scannerFilter.getValue()))
+                        ? scannerFilter.getValue()  : null;
+        activeSearch  = (search != null && !search.getText().isBlank()) ? search.getText().trim() : null;
+
+        final long   snapRepoId  = activeRepoId;
+        final String snapSev     = activeSev;
+        final String snapScanner = activeScanner;
+        final String snapSearch  = activeSearch;
+        final long   snapAfterId = afterId;
+
+        // Build repo name lookup on the FX thread before offloading
+        Map<Long, String> repoNameById = new HashMap<>();
+        ctx.repositoryRepo().findAll().forEach(r -> repoNameById.put(r.getId(), r.getName()));
+
+        Task<List<Finding>> task = new Task<>() {
+            @Override
+            protected List<Finding> call() {
+                return ctx.findingRepo().findPageFiltered(
+                    snapRepoId, snapSev, snapScanner, snapSearch, snapAfterId, PAGE_SIZE);
+            }
+        };
+
+        task.setOnSucceeded(e -> {
+            List<Finding> page = task.getValue();
+            allRows.clear();
+            for (int i = 0; i < page.size(); i++) {
+                Finding f = page.get(i);
+                String repoName = repoNameById.getOrDefault(f.getRepositoryId(), "");
+                allRows.add(toRow(i + 1, f, repoName, Map.of()));
+            }
+            prevBtn.setDisable(pageStack.isEmpty());
+            nextBtn.setDisable(page.size() < PAGE_SIZE);
+            updateStatus();
         });
+
+        task.setOnFailed(e -> {
+            allRows.clear();
+            updateStatus();
+        });
+
+        Thread t = new Thread(task, "findings-load");
+        t.setDaemon(true);
+        t.start();
     }
+
+    // scannerFilter/severityFilter/search are only available after buildToolbar(); store refs here
+    private ComboBox<String> severityFilter;
+    private ComboBox<String> scannerFilter;
+    private TextField        search;
 
     private FindingRow toRow(int reviewNum, Finding f, String repoName, Map<Long, String> scanDates) {
         return new FindingRow(
@@ -648,8 +669,7 @@ public class FindingsView {
             for (FindingRow row : selected) {
                 ctx.findingRepo().deleteById(row.getId());
             }
-            loadFindings();
-            updateStatus();
+            loadPage();
             selectionLabel.setVisible(false);
             selectionLabel.setManaged(false);
             deleteBtn.setVisible(false);
@@ -658,13 +678,13 @@ public class FindingsView {
     }
 
     private void updateStatus() {
-        int shown = filteredRows.size();
-        int total = allRows.size();
+        int shown = allRows.size();
         RepoOption sel = repoFilter != null ? repoFilter.getValue() : null;
         String repoLabel = (sel == null || sel.id() == ALL_REPOS) ? "all repositories" : sel.name();
-        statusLabel.setText(shown + " of " + total + " findings — " + repoLabel);
+        String pageInfo = pageStack.isEmpty() ? "page 1" : "page " + (pageStack.size() + 1);
+        statusLabel.setText(shown + " findings — " + repoLabel + " (" + pageInfo + ")");
         if (countLabel != null) {
-            countLabel.setText(shown + " finding" + (shown == 1 ? "" : "s") + " found");
+            countLabel.setText(shown + " finding" + (shown == 1 ? "" : "s") + " on this page");
         }
     }
 

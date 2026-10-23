@@ -842,7 +842,7 @@ public class RepositoryView {
             String lastScanned = r.getLastScanned() != null
                 ? r.getLastScanned().format(fmt) : "Never scanned";
             String version = r.getVersion() != null ? r.getVersion() : "—";
-            long count = ctx.findingRepo().findByRepositoryId(r.getId()).size();
+            long count = ctx.findingRepo().countByRepositoryId(r.getId());
             rows.add(new RepositoryRow(r.getId(), r.getName(),
                 r.getLocalPath(), version, lastScanned, String.valueOf(count)));
         });

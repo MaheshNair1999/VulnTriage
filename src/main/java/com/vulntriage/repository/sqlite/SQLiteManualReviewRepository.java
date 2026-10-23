@@ -133,6 +133,41 @@ public class SQLiteManualReviewRepository implements ManualReviewRepository {
         }
     }
 
+    @Override
+    public long countForRepo(long repositoryId) {
+        String sql = repositoryId < 0
+            ? "SELECT COUNT(*) FROM manual_reviews"
+            : "SELECT COUNT(*) FROM manual_reviews mr JOIN findings f ON f.id = mr.finding_id WHERE f.repository_id = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (repositoryId >= 0) ps.setLong(1, repositoryId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to count reviews for repo", e);
+        }
+    }
+
+    @Override
+    public long countByVerdictForRepo(long repositoryId, Verdict verdict) {
+        String sql = repositoryId < 0
+            ? "SELECT COUNT(*) FROM manual_reviews WHERE verdict = ?"
+            : "SELECT COUNT(*) FROM manual_reviews mr JOIN findings f ON f.id = mr.finding_id WHERE f.repository_id = ? AND mr.verdict = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (repositoryId < 0) {
+                ps.setString(1, verdict.name());
+            } else {
+                ps.setLong  (1, repositoryId);
+                ps.setString(2, verdict.name());
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to count reviews by verdict for repo", e);
+        }
+    }
+
     private ManualReview map(ResultSet rs) throws SQLException {
         ManualReview mr = new ManualReview();
         mr.setId       (rs.getLong  ("id"));

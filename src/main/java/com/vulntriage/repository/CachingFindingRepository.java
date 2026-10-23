@@ -5,67 +5,43 @@ import com.vulntriage.domain.enums.Severity;
 import com.vulntriage.domain.enums.Verdict;
 import com.vulntriage.repository.api.FindingRepository;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
- * Decorator pattern — wraps a {@link FindingRepository} to cache the results of
- * {@link #findByRepositoryId(long)}, which is the hottest read path in the UI:
- * every screen repaint (Findings, Review, Dashboard) calls it for each repository.
- *
- * <p>Cache semantics:
- * <ul>
- *   <li>{@link #findByRepositoryId} results are stored per {@code repositoryId} in a
- *       {@link HashMap}. Subsequent calls with the same id return the cached list
- *       without hitting the database.</li>
- *   <li>Any write operation ({@link #save}, {@link #deleteByScanRunId},
- *       {@link #deleteById}) clears the entire cache, ensuring reads always reflect
- *       committed state.</li>
- * </ul>
- *
- * <p>All other {@link FindingRepository} methods delegate directly to the wrapped
- * instance without caching, as they are either write operations or infrequently used
- * reads where stale data would be wrong (e.g. {@link #existsByFingerprint}).
+ * Decorator pattern — wraps a {@link FindingRepository} and passes all calls
+ * through to the delegate. The previous list-based cache was removed because
+ * caching entire finding lists at 1M scale causes OOM. All callers that need
+ * counts should use {@link #countByRepositoryId} instead of loading the list.
  */
 public class CachingFindingRepository implements FindingRepository {
 
     private final FindingRepository delegate;
-    private final Map<Long, List<Finding>> cache = new HashMap<>();
 
-    /**
-     * @param delegate the underlying repository to decorate
-     */
     public CachingFindingRepository(FindingRepository delegate) {
         this.delegate = delegate;
     }
 
-    // ── Cached read ────────────────────────────────────────────────────────
+    // ── Passthrough reads/writes ───────────────────────────────────────────
 
     @Override
     public List<Finding> findByRepositoryId(long repositoryId) {
-        return cache.computeIfAbsent(repositoryId, delegate::findByRepositoryId);
+        return delegate.findByRepositoryId(repositoryId);
     }
-
-    // ── Write operations — invalidate cache ────────────────────────────────
 
     @Override
     public void save(Finding finding) {
         delegate.save(finding);
-        cache.clear();
     }
 
     @Override
     public void deleteByScanRunId(long scanRunId) {
         delegate.deleteByScanRunId(scanRunId);
-        cache.clear();
     }
 
     @Override
     public void deleteById(long id) {
         delegate.deleteById(id);
-        cache.clear();
     }
 
     // ── Passthrough reads ──────────────────────────────────────────────────
@@ -113,5 +89,41 @@ public class CachingFindingRepository implements FindingRepository {
     @Override
     public long countUnreviewed() {
         return delegate.countUnreviewed();
+    }
+
+    @Override
+    public long countByRepositoryId(long repositoryId) {
+        return delegate.countByRepositoryId(repositoryId);
+    }
+
+    @Override
+    public long countBySeverity(long repositoryId, Severity severity) {
+        return delegate.countBySeverity(repositoryId, severity);
+    }
+
+    @Override
+    public List<Finding> findPageFiltered(long repositoryId, String severity, String source,
+                                          String search, long afterId, int limit) {
+        return delegate.findPageFiltered(repositoryId, severity, source, search, afterId, limit);
+    }
+
+    @Override
+    public long countFiltered(long repositoryId, String severity, String source, String search) {
+        return delegate.countFiltered(repositoryId, severity, source, search);
+    }
+
+    @Override
+    public java.util.Map<String, long[]> countByScannerBreakdown(long repositoryId) {
+        return delegate.countByScannerBreakdown(repositoryId);
+    }
+
+    @Override
+    public java.util.List<String[]> findTopRuleIds(long repositoryId, int limit) {
+        return delegate.findTopRuleIds(repositoryId, limit);
+    }
+
+    @Override
+    public java.util.List<String[]> findTopFilePaths(long repositoryId, int limit) {
+        return delegate.findTopFilePaths(repositoryId, limit);
     }
 }

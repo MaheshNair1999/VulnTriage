@@ -1,10 +1,8 @@
 package com.vulntriage.ui.dashboard;
 
 import com.vulntriage.app.AppContext;
-import com.vulntriage.domain.Finding;
 import com.vulntriage.domain.Repository;
 import com.vulntriage.domain.enums.Severity;
-import com.vulntriage.domain.enums.ScannerType;
 import com.vulntriage.domain.enums.Verdict;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -111,31 +109,15 @@ public class DashboardView {
         return header;
     }
 
-    // ── Findings for current scope ─────────────────────────────────────────
-
-    private List<Finding> scopedFindings() {
-        if (selectedRepoId == ALL_REPOS) {
-            return ctx.repositoryRepo().findAll().stream()
-                .flatMap(r -> ctx.findingRepo().findByRepositoryId(r.getId()).stream())
-                .toList();
-        }
-        return ctx.findingRepo().findByRepositoryId(selectedRepoId);
-    }
-
     // ── Stat cards ─────────────────────────────────────────────────────────
 
     private HBox buildStatCards() {
-        List<Finding> findings = scopedFindings();
-        long totalFindings = findings.size();
-
-        // Reviews scoped to this repo's findings — join in memory to avoid new repo methods
-        List<Long> findingIds = findings.stream().map(Finding::getId).toList();
-        long reviewed = ctx.reviewRepo().findAll().stream()
-            .filter(r -> findingIds.contains(r.getFindingId())).count();
-        long tpCount  = ctx.reviewRepo().findAll().stream()
-            .filter(r -> findingIds.contains(r.getFindingId()) && r.getVerdict() == Verdict.TP).count();
-        long fpCount  = ctx.reviewRepo().findAll().stream()
-            .filter(r -> findingIds.contains(r.getFindingId()) && r.getVerdict() == Verdict.FP).count();
+        long totalFindings = selectedRepoId == ALL_REPOS
+            ? ctx.findingRepo().countAll()
+            : ctx.findingRepo().countByRepositoryId(selectedRepoId);
+        long reviewed = ctx.reviewRepo().countForRepo(selectedRepoId);
+        long tpCount  = ctx.reviewRepo().countByVerdictForRepo(selectedRepoId, Verdict.TP);
+        long fpCount  = ctx.reviewRepo().countByVerdictForRepo(selectedRepoId, Verdict.FP);
         String fpRate = reviewed > 0
             ? String.format("%.1f%%", (double) fpCount / reviewed * 100) : "—";
 
@@ -209,10 +191,9 @@ public class DashboardView {
         chart.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10px; "
             + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);");
 
-        List<Finding> findings = scopedFindings();
-        long info    = count(findings, Severity.INFO);
-        long warning = count(findings, Severity.WARNING);
-        long error   = count(findings, Severity.ERROR);
+        long info    = ctx.findingRepo().countBySeverity(selectedRepoId, Severity.INFO);
+        long warning = ctx.findingRepo().countBySeverity(selectedRepoId, Severity.WARNING);
+        long error   = ctx.findingRepo().countBySeverity(selectedRepoId, Severity.ERROR);
 
         XYChart.Series<String, Number> series = new XYChart.Series<>();
         series.getData().add(new XYChart.Data<>("INFO",    info));
@@ -232,14 +213,9 @@ public class DashboardView {
         chart.setLegendVisible(true);
         chart.setPrefSize(320, 300);
 
-        List<Finding> findings = scopedFindings();
-        List<Long> findingIds = findings.stream().map(Finding::getId).toList();
-        var allReviews = ctx.reviewRepo().findAll().stream()
-            .filter(r -> findingIds.contains(r.getFindingId())).toList();
-
-        long tp  = allReviews.stream().filter(r -> r.getVerdict() == Verdict.TP).count();
-        long fp  = allReviews.stream().filter(r -> r.getVerdict() == Verdict.FP).count();
-        long rev = allReviews.stream().filter(r -> r.getVerdict() == Verdict.REVIEW).count();
+        long tp  = ctx.reviewRepo().countByVerdictForRepo(selectedRepoId, Verdict.TP);
+        long fp  = ctx.reviewRepo().countByVerdictForRepo(selectedRepoId, Verdict.FP);
+        long rev = ctx.reviewRepo().countByVerdictForRepo(selectedRepoId, Verdict.REVIEW);
 
         if (tp + fp + rev > 0) {
             chart.getData().addAll(
@@ -268,10 +244,6 @@ public class DashboardView {
         return card;
     }
 
-    private long count(List<Finding> findings, Severity sev) {
-        return findings.stream().filter(f -> f.getSeverity() == sev).count();
-    }
-
     private void styleBarChart(BarChart<String, Number> chart) {
         String[] colors = {"#60A5FA", "#FBBF24", "#F87171"};
         var bars = chart.lookupAll(".bar");
@@ -291,31 +263,29 @@ public class DashboardView {
         heading.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: " + TEXT + ";");
         section.getChildren().add(heading);
 
-        List<Finding> all = scopedFindings();
-        if (all.isEmpty()) {
+        java.util.Map<String, long[]> breakdown = ctx.findingRepo().countByScannerBreakdown(selectedRepoId);
+        if (breakdown.isEmpty()) {
             Label none = new Label("No findings yet. Run a scan first.");
             none.setStyle("-fx-font-size: 12px; -fx-text-fill: " + MUTED + "; -fx-font-style: italic;");
             section.getChildren().add(none);
             return section;
         }
 
-        // Per-scanner cards grid
-        java.util.Map<ScannerType, List<Finding>> byScanner = all.stream()
-            .collect(java.util.stream.Collectors.groupingBy(Finding::getSource));
-
         FlowPane scannerGrid = new FlowPane(16, 16);
         scannerGrid.setPrefWrapLength(Double.MAX_VALUE);
 
-        byScanner.entrySet().stream()
-            .sorted(java.util.Map.Entry.<ScannerType, List<Finding>>comparingByValue(
-                java.util.Comparator.comparingInt(List::size)).reversed())
+        breakdown.entrySet().stream()
+            .sorted(java.util.Map.Entry.<String, long[]>comparingByValue(
+                java.util.Comparator.comparingLong(a -> -a[0])))
             .forEach(e -> scannerGrid.getChildren().add(buildScannerDetailCard(e.getKey(), e.getValue())));
 
         section.getChildren().add(scannerGrid);
 
-        // Bottom row: top rules + top files
+        java.util.List<String[]> topRules = ctx.findingRepo().findTopRuleIds(selectedRepoId, 8);
+        java.util.List<String[]> topFiles = ctx.findingRepo().findTopFilePaths(selectedRepoId, 8);
+
         HBox bottomRow = new HBox(16);
-        bottomRow.getChildren().addAll(buildTopRulesPanel(all), buildTopFilesPanel(all));
+        bottomRow.getChildren().addAll(buildTopRulesPanel(topRules), buildTopFilesPanel(topFiles));
         HBox.setHgrow(bottomRow.getChildren().get(0), Priority.ALWAYS);
         HBox.setHgrow(bottomRow.getChildren().get(1), Priority.ALWAYS);
         section.getChildren().add(bottomRow);
@@ -323,12 +293,12 @@ public class DashboardView {
         return section;
     }
 
-    private VBox buildScannerDetailCard(ScannerType scanner, List<Finding> findings) {
-        String accent = scannerAccent(scanner.name());
-        long total = findings.size();
-        long errors   = findings.stream().filter(f -> f.getSeverity() == Severity.ERROR).count();
-        long warnings = findings.stream().filter(f -> f.getSeverity() == Severity.WARNING).count();
-        long infos    = findings.stream().filter(f -> f.getSeverity() == Severity.INFO).count();
+    private VBox buildScannerDetailCard(String scannerName, long[] stats) {
+        String accent = scannerAccent(scannerName);
+        long total    = stats[0];
+        long errors   = stats[1];
+        long warnings = stats[2];
+        long infos    = stats[3];
 
         VBox card = new VBox(10);
         card.setPadding(new Insets(16, 20, 16, 20));
@@ -342,7 +312,7 @@ public class DashboardView {
         Rectangle dot = new Rectangle(10, 10);
         dot.setFill(Color.web(accent));
         dot.setArcWidth(10); dot.setArcHeight(10);
-        Label nameLabel = new Label(scanner.name());
+        Label nameLabel = new Label(scannerName);
         nameLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: " + accent + ";");
         Label totalLabel = new Label(total + " findings");
         totalLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + ";");
@@ -367,30 +337,22 @@ public class DashboardView {
             );
         }
 
-        // Top 3 rules for this scanner
+        // Top 3 rules for this scanner (via DB query scoped to this scanner)
         VBox topRules = new VBox(4);
         Label rulesLabel = new Label("Top rules");
         rulesLabel.setStyle("-fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: " + MUTED + ";");
         topRules.getChildren().add(rulesLabel);
-
-        findings.stream()
-            .collect(java.util.stream.Collectors.groupingBy(
-                f -> f.getRuleId() != null ? f.getRuleId() : "unknown",
-                java.util.stream.Collectors.counting()))
-            .entrySet().stream()
-            .sorted(java.util.Map.Entry.<String, Long>comparingByValue().reversed())
-            .limit(3)
-            .forEach(e -> {
-                HBox ruleRow = new HBox(6);
-                ruleRow.setAlignment(Pos.CENTER_LEFT);
-                Label ruleId = new Label(truncate(e.getKey(), 28));
-                ruleId.setStyle("-fx-font-size: 10px; -fx-text-fill: " + TEXT + "; -fx-font-family: 'Courier New';");
-                Region rsp = new Region(); HBox.setHgrow(rsp, Priority.ALWAYS);
-                Label cnt = new Label(String.valueOf(e.getValue()));
-                cnt.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + ";");
-                ruleRow.getChildren().addAll(ruleId, rsp, cnt);
-                topRules.getChildren().add(ruleRow);
-            });
+        ctx.findingRepo().findTopRuleIds(selectedRepoId, 3).forEach(pair -> {
+            HBox ruleRow = new HBox(6);
+            ruleRow.setAlignment(Pos.CENTER_LEFT);
+            Label ruleId = new Label(truncate(pair[0] != null ? pair[0] : "unknown", 28));
+            ruleId.setStyle("-fx-font-size: 10px; -fx-text-fill: " + TEXT + "; -fx-font-family: 'Courier New';");
+            Region rsp = new Region(); HBox.setHgrow(rsp, Priority.ALWAYS);
+            Label cnt = new Label(pair[1]);
+            cnt.setStyle("-fx-font-size: 10px; -fx-text-fill: " + MUTED + ";");
+            ruleRow.getChildren().addAll(ruleId, rsp, cnt);
+            topRules.getChildren().add(ruleRow);
+        });
 
         card.getChildren().addAll(nameRow, sevRow, bars, topRules);
         return card;
@@ -425,7 +387,7 @@ public class DashboardView {
         return row;
     }
 
-    private VBox buildTopRulesPanel(List<Finding> findings) {
+    private VBox buildTopRulesPanel(java.util.List<String[]> topRules) {
         VBox box = new VBox(10);
         box.setPadding(new Insets(16));
         box.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10; "
@@ -435,43 +397,33 @@ public class DashboardView {
         title.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + MUTED + ";");
         box.getChildren().add(title);
 
-        java.util.Map<String, Long> ruleCounts = findings.stream()
-            .collect(java.util.stream.Collectors.groupingBy(
-                f -> f.getRuleId() != null ? f.getRuleId() : "unknown",
-                java.util.stream.Collectors.counting()));
+        long max = topRules.stream().mapToLong(p -> Long.parseLong(p[1])).max().orElse(1);
+        topRules.forEach(pair -> {
+            HBox row = new HBox(10);
+            row.setAlignment(Pos.CENTER_LEFT);
+            long cnt = Long.parseLong(pair[1]);
 
-        long max = ruleCounts.values().stream().mapToLong(v -> v).max().orElse(1);
+            Label cat = new Label(truncate(pair[0] != null ? pair[0] : "unknown", 36));
+            cat.setStyle("-fx-font-size: 11px; -fx-text-fill: " + TEXT + "; -fx-font-family: 'Courier New';");
+            cat.setMinWidth(200);
 
-        ruleCounts.entrySet().stream()
-            .sorted(java.util.Map.Entry.<String, Long>comparingByValue().reversed())
-            .limit(8)
-            .forEach(entry -> {
-                HBox row = new HBox(10);
-                row.setAlignment(Pos.CENTER_LEFT);
+            ProgressBar bar = new ProgressBar((double) cnt / max);
+            bar.setPrefWidth(Double.MAX_VALUE);
+            bar.setPrefHeight(10);
+            bar.setStyle("-fx-accent: " + ACCENT + ";");
+            HBox.setHgrow(bar, Priority.ALWAYS);
 
-                Label cat = new Label(truncate(entry.getKey(), 36));
-                cat.setStyle("-fx-font-size: 11px; -fx-text-fill: " + TEXT
-                    + "; -fx-font-family: 'Courier New';");
-                cat.setMinWidth(200);
+            Label cntLabel = new Label(String.valueOf(cnt));
+            cntLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + "; -fx-min-width: 36; -fx-alignment: center-right;");
 
-                ProgressBar bar = new ProgressBar((double) entry.getValue() / max);
-                bar.setPrefWidth(Double.MAX_VALUE);
-                bar.setPrefHeight(10);
-                bar.setStyle("-fx-accent: " + ACCENT + ";");
-                HBox.setHgrow(bar, Priority.ALWAYS);
-
-                Label cnt = new Label(String.valueOf(entry.getValue()));
-                cnt.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED
-                    + "; -fx-min-width: 36; -fx-alignment: center-right;");
-
-                row.getChildren().addAll(cat, bar, cnt);
-                box.getChildren().add(row);
-            });
+            row.getChildren().addAll(cat, bar, cntLabel);
+            box.getChildren().add(row);
+        });
 
         return box;
     }
 
-    private VBox buildTopFilesPanel(List<Finding> findings) {
+    private VBox buildTopFilesPanel(java.util.List<String[]> topFiles) {
         VBox box = new VBox(10);
         box.setPadding(new Insets(16));
         box.setStyle("-fx-background-color: " + CARD + "; -fx-background-radius: 10; "
@@ -481,51 +433,37 @@ public class DashboardView {
         title.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + MUTED + ";");
         box.getChildren().add(title);
 
-        java.util.Map<String, Long> fileCounts = findings.stream()
-            .filter(f -> f.getFilePath() != null && !f.getFilePath().isBlank())
-            .collect(java.util.stream.Collectors.groupingBy(
-                f -> {
-                    String p = f.getFilePath().replace('\\', '/');
-                    int idx = p.lastIndexOf('/');
-                    return idx >= 0 ? p.substring(idx + 1) + "  (" + p + ")" : p;
-                },
-                java.util.stream.Collectors.counting()));
+        long max = topFiles.stream().mapToLong(p -> Long.parseLong(p[1])).max().orElse(1);
+        topFiles.forEach(pair -> {
+            String rawPath = pair[0] != null ? pair[0] : "";
+            String p = rawPath.replace('\\', '/');
+            int slash = p.lastIndexOf('/');
+            String fileName = slash >= 0 ? p.substring(slash + 1) : p;
+            long cnt = Long.parseLong(pair[1]);
 
-        long max = fileCounts.values().stream().mapToLong(v -> v).max().orElse(1);
+            HBox row = new HBox(10);
+            row.setAlignment(Pos.CENTER_LEFT);
 
-        fileCounts.entrySet().stream()
-            .sorted(java.util.Map.Entry.<String, Long>comparingByValue().reversed())
-            .limit(8)
-            .forEach(entry -> {
-                String key = entry.getKey();
-                String fileName = key.contains("  (") ? key.substring(0, key.indexOf("  (")) : key;
-                String fullPath = key.contains("  (") ? key.substring(key.indexOf("(") + 1, key.lastIndexOf(")")) : key;
+            VBox fileInfo = new VBox(1);
+            Label fName = new Label(fileName);
+            fName.setStyle("-fx-font-size: 11px; -fx-text-fill: " + TEXT + "; -fx-font-family: 'Courier New'; -fx-font-weight: bold;");
+            Label fPath = new Label(truncate(rawPath, 40));
+            fPath.setStyle("-fx-font-size: 9px; -fx-text-fill: " + MUTED + ";");
+            fileInfo.getChildren().addAll(fName, fPath);
+            fileInfo.setMinWidth(200);
 
-                HBox row = new HBox(10);
-                row.setAlignment(Pos.CENTER_LEFT);
+            ProgressBar bar = new ProgressBar((double) cnt / max);
+            bar.setPrefWidth(Double.MAX_VALUE);
+            bar.setPrefHeight(10);
+            bar.setStyle("-fx-accent: #EF4444;");
+            HBox.setHgrow(bar, Priority.ALWAYS);
 
-                VBox fileInfo = new VBox(1);
-                Label fName = new Label(fileName);
-                fName.setStyle("-fx-font-size: 11px; -fx-text-fill: " + TEXT
-                    + "; -fx-font-family: 'Courier New'; -fx-font-weight: bold;");
-                Label fPath = new Label(truncate(fullPath, 40));
-                fPath.setStyle("-fx-font-size: 9px; -fx-text-fill: " + MUTED + ";");
-                fileInfo.getChildren().addAll(fName, fPath);
-                fileInfo.setMinWidth(200);
+            Label cntLabel = new Label(String.valueOf(cnt));
+            cntLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED + "; -fx-min-width: 36; -fx-alignment: center-right;");
 
-                ProgressBar bar = new ProgressBar((double) entry.getValue() / max);
-                bar.setPrefWidth(Double.MAX_VALUE);
-                bar.setPrefHeight(10);
-                bar.setStyle("-fx-accent: #EF4444;");
-                HBox.setHgrow(bar, Priority.ALWAYS);
-
-                Label cnt = new Label(String.valueOf(entry.getValue()));
-                cnt.setStyle("-fx-font-size: 11px; -fx-text-fill: " + MUTED
-                    + "; -fx-min-width: 36; -fx-alignment: center-right;");
-
-                row.getChildren().addAll(fileInfo, bar, cnt);
-                box.getChildren().add(row);
-            });
+            row.getChildren().addAll(fileInfo, bar, cntLabel);
+            box.getChildren().add(row);
+        });
 
         return box;
     }

@@ -25,4 +25,10 @@ public interface ManualReviewRepository {
 
     /** Remove the review for a finding (used by undo when the finding had no prior review). */
     void deleteByFindingId(long findingId);
+
+    /** Count all reviews whose finding belongs to the given repository (-1 = all repos). */
+    long countForRepo(long repositoryId);
+
+    /** Count reviews with a specific verdict scoped to a repository (-1 = all repos). */
+    long countByVerdictForRepo(long repositoryId, Verdict verdict);
 }

@@ -143,5 +143,12 @@ class CachingFindingRepositoryTest {
         @Override public long countUnreviewed()                   { return 0; }
         @Override public void deleteByScanRunId(long id)         {}
         @Override public void deleteById(long id)                {}
+        @Override public long countByRepositoryId(long id)       { return 0; }
+        @Override public long countBySeverity(long id, com.vulntriage.domain.enums.Severity s) { return 0; }
+        @Override public List<Finding> findPageFiltered(long rId, String sev, String src, String q, long after, int lim) { return List.of(); }
+        @Override public long countFiltered(long rId, String sev, String src, String q) { return 0; }
+        @Override public java.util.Map<String, long[]> countByScannerBreakdown(long rId) { return java.util.Map.of(); }
+        @Override public java.util.List<String[]> findTopRuleIds(long rId, int lim)     { return List.of(); }
+        @Override public java.util.List<String[]> findTopFilePaths(long rId, int lim)   { return List.of(); }
     }
 }

@@ -135,6 +135,10 @@ class MetricsCalculatorTest {
             public long countAll() { return reviews.size(); }
             public long countForFindingIds(List<Long> ids) { return 0; }
             public void deleteByFindingId(long findingId) {}
+            public long countForRepo(long repositoryId) { return reviews.size(); }
+            public long countByVerdictForRepo(long repositoryId, Verdict v) {
+                return reviews.stream().filter(r -> r.getVerdict() == v).count();
+            }
         };
     }
 

@@ -274,6 +274,13 @@ public class SQLiteConnection {
                 log.info("Schema migration: added 'cvss_score' column to findings table");
             }
 
+            // Migration: performance indexes for 1M findings scale (CREATE INDEX IF NOT EXISTS is idempotent)
+            stmt.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_repository_id ON findings(repository_id)");
+            stmt.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity)");
+            stmt.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_source ON findings(source)");
+            stmt.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_scan_run_id ON findings(scan_run_id)");
+            log.info("Schema migration: ensured performance indexes on findings table");
+
             // Migration: create final_reviews table for existing DBs
             boolean hasFinalReviews = connection.getMetaData()
                 .getTables(null, null, "final_reviews", null).next();

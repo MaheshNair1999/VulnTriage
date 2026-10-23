@@ -158,5 +158,7 @@ class CommandTest {
         @Override public long countByVerdict(Verdict v)                         { return 0; }
         @Override public long countAll()                                         { return store.size(); }
         @Override public long countForFindingIds(List<Long> ids)                { return 0; }
+        @Override public long countForRepo(long repositoryId)                   { return store.size(); }
+        @Override public long countByVerdictForRepo(long repositoryId, com.vulntriage.domain.enums.Verdict v) { return 0; }
     }
 }

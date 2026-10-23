@@ -276,6 +276,13 @@ class PipelineIntegrationTest {
         @Override public long countUnreviewed() { return store.size(); }
         @Override public void deleteByScanRunId(long id) { store.values().removeIf(f -> f.getScanRunId() == id); }
         @Override public void deleteById(long id) { store.remove(id); }
+        @Override public long countByRepositoryId(long id) { return store.values().stream().filter(f -> f.getRepositoryId() == id).count(); }
+        @Override public long countBySeverity(long id, com.vulntriage.domain.enums.Severity s) { return 0; }
+        @Override public List<Finding> findPageFiltered(long rId, String sev, String src, String q, long after, int lim) { return List.of(); }
+        @Override public long countFiltered(long rId, String sev, String src, String q) { return 0; }
+        @Override public java.util.Map<String, long[]> countByScannerBreakdown(long rId) { return java.util.Map.of(); }
+        @Override public java.util.List<String[]> findTopRuleIds(long rId, int lim) { return List.of(); }
+        @Override public java.util.List<String[]> findTopFilePaths(long rId, int lim) { return List.of(); }
     }
 
     static class InMemoryRepositoryRepo implements RepositoryRepo {
@@ -334,6 +341,10 @@ class PipelineIntegrationTest {
         @Override public long countAll() { return store.size(); }
         @Override public long countForFindingIds(List<Long> ids) { return store.values().stream().filter(r -> ids.contains(r.getFindingId())).count(); }
         @Override public void deleteByFindingId(long findingId) { store.remove(findingId); }
+        @Override public long countForRepo(long repositoryId) { return store.size(); }
+        @Override public long countByVerdictForRepo(long repositoryId, Verdict v) {
+            return store.values().stream().filter(r -> r.getVerdict() == v).count();
+        }
     }
 
     static class InMemoryLlmResultRepository implements LlmResultRepository {

@@ -2,7 +2,7 @@ package com.vulntriage.pipeline.stages;
 
 import com.vulntriage.app.AppContext;
 import com.vulntriage.domain.Finding;
-import com.vulntriage.domain.enums.Severity;
+import com.vulntriage.domain.Repository;
 import com.vulntriage.event.PipelineObserver;
 import com.vulntriage.pipeline.api.AbstractPipelineStage;
 import com.vulntriage.pipeline.api.PipelineContext;
@@ -10,9 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -68,43 +66,45 @@ public class SelectStage extends AbstractPipelineStage {
     protected void doExecute(PipelineContext ctx) {
         AppContext app = AppContext.getInstance();
 
-        // Build repoId → repoName map and collect all findings
-        Map<Long, String> repoNameById = new HashMap<>();
-        List<Finding> allFindings = new ArrayList<>();
-
-        app.repositoryRepo().findAll().forEach(r -> {
-            repoNameById.put(r.getId(), r.getName() != null ? r.getName() : "");
-            allFindings.addAll(app.findingRepo().findByRepositoryId(r.getId()));
-        });
-
-        List<Finding> filtered = allFindings.stream().filter(f -> {
-            // Scanner filter
-            if (!"all".equalsIgnoreCase(scanner) && !scanner.isBlank()) {
-                if (f.getSource() == null
-                        || !f.getSource().name().equalsIgnoreCase(scanner)) return false;
+        // Resolve repositoryName → repositoryId for DB-side filtering
+        long repoId = -1L;
+        if (!"all".equalsIgnoreCase(repositoryName) && !repositoryName.isBlank()) {
+            for (Repository r : app.repositoryRepo().findAll()) {
+                if (repositoryName.equalsIgnoreCase(r.getName())) {
+                    repoId = r.getId();
+                    break;
+                }
             }
-            // Repository filter
-            if (!"all".equalsIgnoreCase(repositoryName) && !repositoryName.isBlank()) {
-                String rname = repoNameById.getOrDefault(f.getRepositoryId(), "");
-                if (!repositoryName.equalsIgnoreCase(rname)) return false;
-            }
-            // Rule pattern filter (substring, case-insensitive)
-            if (!rulePattern.isBlank()) {
-                if (f.getRuleId() == null
-                        || !f.getRuleId().toLowerCase().contains(rulePattern.toLowerCase())) return false;
-            }
-            // Severity filter
-            if (!severities.isEmpty()) {
-                if (f.getSeverity() == null) return false;
-                if (!severities.contains(f.getSeverity().name())) return false;
-            }
-            return true;
-        }).collect(Collectors.toList());
+        }
 
-        log.info("SelectStage: {} / {} findings matched (scanner={}, repo={}, rule='{}', severity={})",
-            filtered.size(), allFindings.size(), scanner, repositoryName, rulePattern, severities);
+        // Map multi-value severity list to a single string for the paginated query
+        // (findPageFiltered supports one severity value; for multi-value we post-filter)
+        String sevParam = (severities.size() == 1) ? severities.get(0) : null;
+        String srcParam = (!"all".equalsIgnoreCase(scanner) && !scanner.isBlank()) ? scanner : null;
+        String qParam   = rulePattern.isBlank() ? null : rulePattern;
 
-        ctx.setAllFindings(allFindings);
+        // Page through all matching findings in 5000-row batches to stay off-heap
+        List<Finding> filtered = new ArrayList<>();
+        long afterId = 0L;
+        int page;
+        do {
+            List<Finding> batch = app.findingRepo().findPageFiltered(
+                repoId, sevParam, srcParam, qParam, afterId, 5000);
+            // Post-filter for multi-severity and remaining criteria the single SQL param can't cover
+            for (Finding f : batch) {
+                if (!severities.isEmpty() && (f.getSeverity() == null
+                        || !severities.contains(f.getSeverity().name()))) continue;
+                filtered.add(f);
+            }
+            page = batch.size();
+            if (page > 0) afterId = batch.get(page - 1).getId();
+        } while (page == 5000);
+
+        long totalMatched = app.findingRepo().countFiltered(repoId, sevParam, srcParam, qParam);
+        log.info("SelectStage: {} findings matched (scanner={}, repo={}, rule='{}', severity={}, total in scope={})",
+            filtered.size(), scanner, repositoryName, rulePattern, severities, totalMatched);
+
+        ctx.setAllFindings(filtered);
         ctx.setSample(filtered);
     }
 }

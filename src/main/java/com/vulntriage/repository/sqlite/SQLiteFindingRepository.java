@@ -174,6 +174,187 @@ public class SQLiteFindingRepository implements FindingRepository {
             """);
     }
 
+    // ── countByRepositoryId ───────────────────────────────────────────────
+
+    @Override
+    public long countByRepositoryId(long repositoryId) {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT COUNT(*) FROM findings WHERE repository_id = ?")) {
+            ps.setLong(1, repositoryId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to count findings for repository " + repositoryId, e);
+        }
+    }
+
+    // ── countBySeverity ───────────────────────────────────────────────────
+
+    @Override
+    public long countBySeverity(long repositoryId, Severity severity) {
+        String sql = repositoryId < 0
+            ? "SELECT COUNT(*) FROM findings WHERE severity = ?"
+            : "SELECT COUNT(*) FROM findings WHERE repository_id = ? AND severity = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (repositoryId < 0) {
+                ps.setString(1, severity.name());
+            } else {
+                ps.setLong  (1, repositoryId);
+                ps.setString(2, severity.name());
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to count findings by severity", e);
+        }
+    }
+
+    // ── findPageFiltered ──────────────────────────────────────────────────
+
+    @Override
+    public List<Finding> findPageFiltered(long repositoryId, String severity, String source,
+                                          String search, long afterId, int limit) {
+        List<Object> params = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("SELECT * FROM findings WHERE id > ?");
+        params.add(afterId);
+        if (repositoryId >= 0) {
+            sql.append(" AND repository_id = ?");
+            params.add(repositoryId);
+        }
+        if (severity != null && !severity.isBlank()) {
+            sql.append(" AND severity = ?");
+            params.add(severity.toUpperCase());
+        }
+        if (source != null && !source.isBlank()) {
+            sql.append(" AND source = ?");
+            params.add(source.toUpperCase());
+        }
+        if (search != null && !search.isBlank()) {
+            sql.append(" AND (LOWER(rule_id) LIKE ? OR LOWER(file_path) LIKE ? OR LOWER(category) LIKE ? OR LOWER(message) LIKE ?)");
+            String like = "%" + search.toLowerCase() + "%";
+            params.add(like); params.add(like); params.add(like); params.add(like);
+        }
+        sql.append(" ORDER BY id LIMIT ?");
+        params.add(limit);
+        return query(sql.toString(), params.toArray());
+    }
+
+    // ── countFiltered ─────────────────────────────────────────────────────
+
+    @Override
+    public long countFiltered(long repositoryId, String severity, String source, String search) {
+        List<Object> params = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM findings WHERE 1=1");
+        if (repositoryId >= 0) {
+            sql.append(" AND repository_id = ?");
+            params.add(repositoryId);
+        }
+        if (severity != null && !severity.isBlank()) {
+            sql.append(" AND severity = ?");
+            params.add(severity.toUpperCase());
+        }
+        if (source != null && !source.isBlank()) {
+            sql.append(" AND source = ?");
+            params.add(source.toUpperCase());
+        }
+        if (search != null && !search.isBlank()) {
+            sql.append(" AND (LOWER(rule_id) LIKE ? OR LOWER(file_path) LIKE ? OR LOWER(category) LIKE ? OR LOWER(message) LIKE ?)");
+            String like = "%" + search.toLowerCase() + "%";
+            params.add(like); params.add(like); params.add(like); params.add(like);
+        }
+        try (PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            for (int i = 0; i < params.size(); i++) {
+                Object p = params.get(i);
+                if (p instanceof String s) ps.setString(i + 1, s);
+                else if (p instanceof Long l) ps.setLong(i + 1, l);
+                else ps.setObject(i + 1, p);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("countFiltered query failed: " + sql, e);
+        }
+    }
+
+    // ── countByScannerBreakdown ───────────────────────────────────────────
+
+    @Override
+    public java.util.Map<String, long[]> countByScannerBreakdown(long repositoryId) {
+        String sql = repositoryId < 0
+            ? "SELECT source, severity, COUNT(*) AS cnt FROM findings GROUP BY source, severity"
+            : "SELECT source, severity, COUNT(*) AS cnt FROM findings WHERE repository_id = ? GROUP BY source, severity";
+        java.util.Map<String, long[]> result = new java.util.LinkedHashMap<>();
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (repositoryId >= 0) ps.setLong(1, repositoryId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String src = rs.getString("source");
+                    String sev = rs.getString("severity");
+                    long cnt   = rs.getLong("cnt");
+                    long[] arr = result.computeIfAbsent(src, k -> new long[4]); // [total, errors, warnings, infos]
+                    arr[0] += cnt;
+                    if ("ERROR".equals(sev))   arr[1] += cnt;
+                    else if ("WARNING".equals(sev)) arr[2] += cnt;
+                    else                            arr[3] += cnt;
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to compute scanner breakdown", e);
+        }
+        return result;
+    }
+
+    // ── findTopRuleIds ────────────────────────────────────────────────────
+
+    @Override
+    public java.util.List<String[]> findTopRuleIds(long repositoryId, int limit) {
+        String sql = repositoryId < 0
+            ? "SELECT rule_id, COUNT(*) AS cnt FROM findings GROUP BY rule_id ORDER BY cnt DESC LIMIT ?"
+            : "SELECT rule_id, COUNT(*) AS cnt FROM findings WHERE repository_id = ? GROUP BY rule_id ORDER BY cnt DESC LIMIT ?";
+        java.util.List<String[]> result = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (repositoryId < 0) {
+                ps.setInt(1, limit);
+            } else {
+                ps.setLong(1, repositoryId);
+                ps.setInt (2, limit);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) result.add(new String[]{rs.getString(1), String.valueOf(rs.getLong(2))});
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to query top rule IDs", e);
+        }
+        return result;
+    }
+
+    // ── findTopFilePaths ──────────────────────────────────────────────────
+
+    @Override
+    public java.util.List<String[]> findTopFilePaths(long repositoryId, int limit) {
+        String sql = repositoryId < 0
+            ? "SELECT file_path, COUNT(*) AS cnt FROM findings GROUP BY file_path ORDER BY cnt DESC LIMIT ?"
+            : "SELECT file_path, COUNT(*) AS cnt FROM findings WHERE repository_id = ? GROUP BY file_path ORDER BY cnt DESC LIMIT ?";
+        java.util.List<String[]> result = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            if (repositoryId < 0) {
+                ps.setInt(1, limit);
+            } else {
+                ps.setLong(1, repositoryId);
+                ps.setInt (2, limit);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) result.add(new String[]{rs.getString(1), String.valueOf(rs.getLong(2))});
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to query top file paths", e);
+        }
+        return result;
+    }
+
     // ── deleteByScanRunId ─────────────────────────────────────────────────
 
     @Override

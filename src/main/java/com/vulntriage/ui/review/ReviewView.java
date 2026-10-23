@@ -446,11 +446,18 @@ public class ReviewView {
         return 0; // all reviewed — go to start
     }
 
+    private static final int REVIEW_PAGE = 1000;
+
     private void loadFindings() {
         findings.clear();
-        ctx.repositoryRepo().findAll().forEach(repo ->
-            findings.addAll(ctx.findingRepo().findByRepositoryId(repo.getId()))
-        );
+        // Load first 1000 findings across all repos — enough for an interactive review session.
+        // At 1M scale, loading the full list would OOM; the analyst works through batches.
+        findings.addAll(ctx.findingRepo().findPageFiltered(-1L, null, null, null, 0L, REVIEW_PAGE));
+    }
+
+    private void loadNextBatch(long afterId) {
+        List<Finding> next = ctx.findingRepo().findPageFiltered(-1L, null, null, null, afterId, REVIEW_PAGE);
+        findings.addAll(next);
     }
 
     private void showFinding(int i) {
@@ -465,11 +472,10 @@ public class ReviewView {
         // Position counter
         positionLabel.setText("#" + (index + 1) + " of " + findings.size());
 
-        // Progress — scoped to the findings currently in this view
-        List<Long> findingIds = findings.stream().map(Finding::getId).toList();
-        long reviewed = ctx.reviewRepo().countForFindingIds(findingIds);
-        long total    = findings.size();
-        progressLabel.setText(reviewed + " / " + total + " reviewed");
+        // Progress — use the DB total rather than the loaded page
+        long reviewed = ctx.reviewRepo().countAll();
+        long total    = ctx.findingRepo().countAll();
+        progressLabel.setText(reviewed + " / " + total + " reviewed (total DB)");
         progressBar.setProgress(total > 0 ? (double) reviewed / total : 0);
 
         // Metadata
@@ -586,7 +592,14 @@ public class ReviewView {
     }
 
     private void moveNext() {
-        if (index < findings.size() - 1) showFinding(index + 1);
+        if (index < findings.size() - 1) {
+            // Prefetch next batch when within 50 findings of the end
+            if (index >= findings.size() - 50 && findings.size() % REVIEW_PAGE == 0) {
+                long lastId = findings.get(findings.size() - 1).getId();
+                loadNextBatch(lastId);
+            }
+            showFinding(index + 1);
+        }
     }
 
     private void movePrev() {
