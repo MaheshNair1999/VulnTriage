@@ -625,8 +625,10 @@ public class FindingsView {
 
         task.setOnFailed(e -> {
             log.error("Findings page load failed", task.getException());
-            allRows.clear();
-            updateStatus();
+            // Keep existing rows visible rather than blanking the table on error.
+            // The user will see stale data with an error hint instead of disappearing findings.
+            if (statusLabel != null)
+                statusLabel.setText("Load failed — click ↻ Refresh to retry");
         });
 
         Thread t = new Thread(task, "findings-load");

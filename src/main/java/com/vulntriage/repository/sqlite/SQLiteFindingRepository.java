@@ -34,6 +34,7 @@ public class SQLiteFindingRepository implements FindingRepository {
                cwe, fingerprint, created_at, cvss_vector, cvss_score)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """;
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setLong  (1,  f.getScanRunId());
             ps.setLong  (2,  f.getRepositoryId());
@@ -72,12 +73,14 @@ public class SQLiteFindingRepository implements FindingRepository {
             log.error("Failed to save finding: {}", f, e);
             throw new RuntimeException("Failed to save finding", e);
         }
+        }
     }
 
     // ── findById ──────────────────────────────────────────────────────────
 
     @Override
     public Optional<Finding> findById(long id) {
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT * FROM findings WHERE id = ?")) {
             ps.setLong(1, id);
@@ -88,6 +91,7 @@ public class SQLiteFindingRepository implements FindingRepository {
             throw new RuntimeException("Failed to find finding by id=" + id, e);
         }
         return Optional.empty();
+        }
     }
 
     // ── findByRepositoryId ────────────────────────────────────────────────
@@ -134,6 +138,7 @@ public class SQLiteFindingRepository implements FindingRepository {
 
     @Override
     public boolean existsByFingerprint(String fingerprint) {
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT 1 FROM findings WHERE fingerprint = ? LIMIT 1")) {
             ps.setString(1, fingerprint);
@@ -142,6 +147,7 @@ public class SQLiteFindingRepository implements FindingRepository {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Failed to check fingerprint", e);
+        }
         }
     }
 
@@ -154,6 +160,7 @@ public class SQLiteFindingRepository implements FindingRepository {
 
     @Override
     public long countByVerdict(Verdict verdict) {
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT COUNT(*) FROM manual_reviews WHERE verdict = ?")) {
             ps.setString(1, verdict.name());
@@ -162,6 +169,7 @@ public class SQLiteFindingRepository implements FindingRepository {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Failed to count by verdict", e);
+        }
         }
     }
 
@@ -178,6 +186,7 @@ public class SQLiteFindingRepository implements FindingRepository {
 
     @Override
     public long countByRepositoryId(long repositoryId) {
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT COUNT(*) FROM findings WHERE repository_id = ?")) {
             ps.setLong(1, repositoryId);
@@ -186,6 +195,7 @@ public class SQLiteFindingRepository implements FindingRepository {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Failed to count findings for repository " + repositoryId, e);
+        }
         }
     }
 
@@ -196,6 +206,7 @@ public class SQLiteFindingRepository implements FindingRepository {
         String sql = repositoryId < 0
             ? "SELECT COUNT(*) FROM findings WHERE severity = ?"
             : "SELECT COUNT(*) FROM findings WHERE repository_id = ? AND severity = ?";
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             if (repositoryId < 0) {
                 ps.setString(1, severity.name());
@@ -208,6 +219,7 @@ public class SQLiteFindingRepository implements FindingRepository {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Failed to count findings by severity", e);
+        }
         }
     }
 
@@ -264,6 +276,7 @@ public class SQLiteFindingRepository implements FindingRepository {
             String like = "%" + search.toLowerCase() + "%";
             params.add(like); params.add(like); params.add(like); params.add(like);
         }
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(sql.toString())) {
             for (int i = 0; i < params.size(); i++) {
                 Object p = params.get(i);
@@ -277,6 +290,7 @@ public class SQLiteFindingRepository implements FindingRepository {
         } catch (SQLException e) {
             throw new RuntimeException("countFiltered query failed: " + sql, e);
         }
+        }
     }
 
     // ── countByScannerBreakdown ───────────────────────────────────────────
@@ -287,6 +301,7 @@ public class SQLiteFindingRepository implements FindingRepository {
             ? "SELECT source, severity, COUNT(*) AS cnt FROM findings GROUP BY source, severity"
             : "SELECT source, severity, COUNT(*) AS cnt FROM findings WHERE repository_id = ? GROUP BY source, severity";
         java.util.Map<String, long[]> result = new java.util.LinkedHashMap<>();
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             if (repositoryId >= 0) ps.setLong(1, repositoryId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -304,6 +319,7 @@ public class SQLiteFindingRepository implements FindingRepository {
         } catch (SQLException e) {
             throw new RuntimeException("Failed to compute scanner breakdown", e);
         }
+        }
         return result;
     }
 
@@ -315,6 +331,7 @@ public class SQLiteFindingRepository implements FindingRepository {
             ? "SELECT rule_id, COUNT(*) AS cnt FROM findings GROUP BY rule_id ORDER BY cnt DESC LIMIT ?"
             : "SELECT rule_id, COUNT(*) AS cnt FROM findings WHERE repository_id = ? GROUP BY rule_id ORDER BY cnt DESC LIMIT ?";
         java.util.List<String[]> result = new ArrayList<>();
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             if (repositoryId < 0) {
                 ps.setInt(1, limit);
@@ -328,6 +345,7 @@ public class SQLiteFindingRepository implements FindingRepository {
         } catch (SQLException e) {
             throw new RuntimeException("Failed to query top rule IDs", e);
         }
+        }
         return result;
     }
 
@@ -339,6 +357,7 @@ public class SQLiteFindingRepository implements FindingRepository {
             ? "SELECT file_path, COUNT(*) AS cnt FROM findings GROUP BY file_path ORDER BY cnt DESC LIMIT ?"
             : "SELECT file_path, COUNT(*) AS cnt FROM findings WHERE repository_id = ? GROUP BY file_path ORDER BY cnt DESC LIMIT ?";
         java.util.List<String[]> result = new ArrayList<>();
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             if (repositoryId < 0) {
                 ps.setInt(1, limit);
@@ -352,6 +371,7 @@ public class SQLiteFindingRepository implements FindingRepository {
         } catch (SQLException e) {
             throw new RuntimeException("Failed to query top file paths", e);
         }
+        }
         return result;
     }
 
@@ -359,6 +379,7 @@ public class SQLiteFindingRepository implements FindingRepository {
 
     @Override
     public void deleteByScanRunId(long scanRunId) {
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(
                 "DELETE FROM findings WHERE scan_run_id = ?")) {
             ps.setLong(1, scanRunId);
@@ -366,12 +387,14 @@ public class SQLiteFindingRepository implements FindingRepository {
         } catch (SQLException e) {
             throw new RuntimeException("Failed to delete findings for scan run " + scanRunId, e);
         }
+        }
     }
 
     // ── deleteById ────────────────────────────────────────────────────────
 
     @Override
     public void deleteById(long id) {
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(
                 "DELETE FROM findings WHERE id = ?")) {
             ps.setLong(1, id);
@@ -379,12 +402,14 @@ public class SQLiteFindingRepository implements FindingRepository {
         } catch (SQLException e) {
             throw new RuntimeException("Failed to delete finding " + id, e);
         }
+        }
     }
 
     // ── Private helpers ───────────────────────────────────────────────────
 
     private List<Finding> query(String sql, Object... params) {
         List<Finding> results = new ArrayList<>();
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) {
                 if (params[i] instanceof String s) ps.setString(i + 1, s);
@@ -397,15 +422,18 @@ public class SQLiteFindingRepository implements FindingRepository {
         } catch (SQLException e) {
             throw new RuntimeException("Query failed: " + sql, e);
         }
+        }
         return results;
     }
 
     private long count(String sql) {
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             return rs.next() ? rs.getLong(1) : 0;
         } catch (SQLException e) {
             throw new RuntimeException("Count query failed", e);
+        }
         }
     }
 

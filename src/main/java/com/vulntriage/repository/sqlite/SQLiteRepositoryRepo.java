@@ -20,6 +20,7 @@ public class SQLiteRepositoryRepo implements RepositoryRepo {
     @Override
     public void save(Repository r) {
         String sql = "INSERT INTO repositories (name, local_path, url, version, created_at) VALUES (?,?,?,?,?)";
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, r.getName());
             ps.setString(2, r.getLocalPath());
@@ -33,10 +34,12 @@ public class SQLiteRepositoryRepo implements RepositoryRepo {
         } catch (SQLException e) {
             throw new RuntimeException("Failed to save repository", e);
         }
+        }
     }
 
     @Override
     public Optional<Repository> findById(long id) {
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT * FROM repositories WHERE id = ?")) {
             ps.setLong(1, id);
@@ -47,11 +50,13 @@ public class SQLiteRepositoryRepo implements RepositoryRepo {
             throw new RuntimeException("Failed to find repository id=" + id, e);
         }
         return Optional.empty();
+        }
     }
 
     @Override
     public List<Repository> findAll() {
         List<Repository> list = new ArrayList<>();
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT * FROM repositories WHERE hidden = 0 OR hidden IS NULL ORDER BY name");
              ResultSet rs = ps.executeQuery()) {
@@ -59,12 +64,14 @@ public class SQLiteRepositoryRepo implements RepositoryRepo {
         } catch (SQLException e) {
             throw new RuntimeException("Failed to list repositories", e);
         }
+        }
         return list;
     }
 
     @Override
     public void update(Repository r) {
         String sql = "UPDATE repositories SET name=?, local_path=?, url=?, version=?, last_scanned=? WHERE id=?";
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, r.getName());
             ps.setString(2, r.getLocalPath());
@@ -76,11 +83,13 @@ public class SQLiteRepositoryRepo implements RepositoryRepo {
         } catch (SQLException e) {
             throw new RuntimeException("Failed to update repository id=" + r.getId(), e);
         }
+        }
     }
 
     @Override
     public void delete(long id) {
         // Soft-delete: mark hidden so findings keep their FK reference
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement(
                 "UPDATE repositories SET hidden = 1 WHERE id = ?")) {
             ps.setLong(1, id);
@@ -88,15 +97,18 @@ public class SQLiteRepositoryRepo implements RepositoryRepo {
         } catch (SQLException e) {
             throw new RuntimeException("Failed to hide repository id=" + id, e);
         }
+        }
     }
 
     @Override
     public long countAll() {
+        synchronized (conn) {
         try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM repositories");
              ResultSet rs = ps.executeQuery()) {
             return rs.next() ? rs.getLong(1) : 0;
         } catch (SQLException e) {
             throw new RuntimeException("Failed to count repositories", e);
+        }
         }
     }
 
