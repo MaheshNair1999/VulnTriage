@@ -30,9 +30,23 @@ public class SQLiteConnection {
         String dbUrl = System.getProperty("vulntriage.db.url", "jdbc:sqlite:vulntriage.db");
         try {
             connection = DriverManager.getConnection(dbUrl);
+            // Set busy_timeout first so subsequent pragmas wait for locks instead of failing
+            connection.createStatement().execute("PRAGMA busy_timeout=30000");
             connection.createStatement().execute("PRAGMA foreign_keys = ON");
+            connection.createStatement().execute("PRAGMA synchronous=FULL");
+            // WAL mode allows concurrent reads during writes; non-fatal if it can't be set
+            try {
+                connection.createStatement().execute("PRAGMA journal_mode=WAL");
+            } catch (SQLException walEx) {
+                log.warn("Could not enable WAL mode (non-fatal): {}", walEx.getMessage());
+            }
+            // Log the actual journal mode so startup logs confirm what is active
+            try (var rs = connection.createStatement().executeQuery("PRAGMA journal_mode")) {
+                if (rs.next()) log.info("SQLite journal mode: {}", rs.getString(1));
+            } catch (SQLException ignored) {}
             log.info("Connected to SQLite database: {}", dbUrl);
             initialiseSchema();
+            checkpoint();
         } catch (SQLException e) {
             throw new RuntimeException("Failed to connect to SQLite database", e);
         }
@@ -48,6 +62,7 @@ public class SQLiteConnection {
     /** Close the current connection and clear the singleton so the next getInstance() reconnects. */
     public static synchronized void reset() {
         if (instance != null) {
+            instance.checkpoint();
             try { instance.connection.close(); } catch (SQLException ignored) {}
             instance = null;
         }
@@ -55,6 +70,18 @@ public class SQLiteConnection {
 
     public Connection getConnection() {
         return connection;
+    }
+
+    /**
+     * Force a WAL checkpoint so all pending writes are flushed to the main .db file.
+     * Safe to call in any journal mode — PRAGMA wal_checkpoint is a no-op in non-WAL mode.
+     */
+    public void checkpoint() {
+        try {
+            connection.createStatement().execute("PRAGMA wal_checkpoint(FULL)");
+        } catch (SQLException e) {
+            log.warn("WAL checkpoint failed (non-fatal): {}", e.getMessage());
+        }
     }
 
     // ── Schema ─────────────────────────────────────────────────────────────
@@ -69,7 +96,8 @@ public class SQLiteConnection {
                     url          TEXT,
                     version      TEXT,
                     created_at   TEXT    NOT NULL,
-                    last_scanned TEXT
+                    last_scanned TEXT,
+                    hidden       INTEGER NOT NULL DEFAULT 0
                 )
             """);
 
@@ -211,12 +239,11 @@ public class SQLiteConnection {
      * Safe to run on every startup — each ALTER is guarded by a column existence check.
      */
     private void migrateSchema() {
-        try (Statement stmt = connection.createStatement()) {
-            // Migration: create prompt_templates table for existing DBs that pre-date this feature
-            boolean hasPromptTemplates = connection.getMetaData()
-                .getTables(null, null, "prompt_templates", null).next();
-            if (!hasPromptTemplates) {
-                stmt.executeUpdate("""
+        // Each migration runs independently — a failure in one does not block the rest.
+        runMigration("prompt_templates table", () -> {
+            boolean has = connection.getMetaData().getTables(null, null, "prompt_templates", null).next();
+            if (!has) {
+                connection.createStatement().executeUpdate("""
                     CREATE TABLE IF NOT EXISTS prompt_templates (
                         id          INTEGER PRIMARY KEY AUTOINCREMENT,
                         name        TEXT    NOT NULL,
@@ -230,62 +257,40 @@ public class SQLiteConnection {
                 log.info("Schema migration: created prompt_templates table");
                 seedBuiltInPrompts();
             }
-
-            // Migration: add cwe column if missing (added in week-10 for thesis dataset)
-            boolean hasCwe = connection.getMetaData()
-                .getColumns(null, null, "findings", "cwe")
-                .next();
-            if (!hasCwe) {
-                stmt.executeUpdate("ALTER TABLE findings ADD COLUMN cwe TEXT");
-                log.info("Schema migration: added 'cwe' column to findings table");
-            }
-
-            // Migration: add hidden flag for soft-delete on repositories
-            boolean hasHidden = connection.getMetaData()
-                .getColumns(null, null, "repositories", "hidden")
-                .next();
-            if (!hasHidden) {
-                stmt.executeUpdate("ALTER TABLE repositories ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
+        });
+        runMigration("cwe column", () -> {
+            if (!connection.getMetaData().getColumns(null, null, "findings", "cwe").next())
+                connection.createStatement().executeUpdate("ALTER TABLE findings ADD COLUMN cwe TEXT");
+        });
+        runMigration("hidden column", () -> {
+            if (!connection.getMetaData().getColumns(null, null, "repositories", "hidden").next()) {
+                connection.createStatement().executeUpdate(
+                    "ALTER TABLE repositories ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
                 log.info("Schema migration: added 'hidden' column to repositories table");
             }
-
-            // Migration: add version column for GitHub-cloned repos
-            boolean hasVersion = connection.getMetaData()
-                .getColumns(null, null, "repositories", "version")
-                .next();
-            if (!hasVersion) {
-                stmt.executeUpdate("ALTER TABLE repositories ADD COLUMN version TEXT");
-                log.info("Schema migration: added 'version' column to repositories table");
-            }
-
-            // Migration: add CVSS v3.1 fields to findings (added for CVSS calculator feature)
-            boolean hasCvssVector = connection.getMetaData()
-                .getColumns(null, null, "findings", "cvss_vector")
-                .next();
-            if (!hasCvssVector) {
-                stmt.executeUpdate("ALTER TABLE findings ADD COLUMN cvss_vector TEXT");
-                log.info("Schema migration: added 'cvss_vector' column to findings table");
-            }
-            boolean hasCvssScore = connection.getMetaData()
-                .getColumns(null, null, "findings", "cvss_score")
-                .next();
-            if (!hasCvssScore) {
-                stmt.executeUpdate("ALTER TABLE findings ADD COLUMN cvss_score REAL");
-                log.info("Schema migration: added 'cvss_score' column to findings table");
-            }
-
-            // Migration: performance indexes for 1M findings scale (CREATE INDEX IF NOT EXISTS is idempotent)
-            stmt.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_repository_id ON findings(repository_id)");
-            stmt.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity)");
-            stmt.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_source ON findings(source)");
-            stmt.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_scan_run_id ON findings(scan_run_id)");
+        });
+        runMigration("version column", () -> {
+            if (!connection.getMetaData().getColumns(null, null, "repositories", "version").next())
+                connection.createStatement().executeUpdate("ALTER TABLE repositories ADD COLUMN version TEXT");
+        });
+        runMigration("cvss_vector column", () -> {
+            if (!connection.getMetaData().getColumns(null, null, "findings", "cvss_vector").next())
+                connection.createStatement().executeUpdate("ALTER TABLE findings ADD COLUMN cvss_vector TEXT");
+        });
+        runMigration("cvss_score column", () -> {
+            if (!connection.getMetaData().getColumns(null, null, "findings", "cvss_score").next())
+                connection.createStatement().executeUpdate("ALTER TABLE findings ADD COLUMN cvss_score REAL");
+        });
+        runMigration("performance indexes", () -> {
+            connection.createStatement().executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_repository_id ON findings(repository_id)");
+            connection.createStatement().executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity)");
+            connection.createStatement().executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_source ON findings(source)");
+            connection.createStatement().executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_scan_run_id ON findings(scan_run_id)");
             log.info("Schema migration: ensured performance indexes on findings table");
-
-            // Migration: create final_reviews table for existing DBs
-            boolean hasFinalReviews = connection.getMetaData()
-                .getTables(null, null, "final_reviews", null).next();
-            if (!hasFinalReviews) {
-                stmt.executeUpdate("""
+        });
+        runMigration("final_reviews table", () -> {
+            if (!connection.getMetaData().getTables(null, null, "final_reviews", null).next())
+                connection.createStatement().executeUpdate("""
                     CREATE TABLE IF NOT EXISTS final_reviews (
                         id          INTEGER PRIMARY KEY AUTOINCREMENT,
                         finding_id  INTEGER NOT NULL UNIQUE REFERENCES findings(id),
@@ -294,22 +299,25 @@ public class SQLiteConnection {
                         reviewed_at TEXT    NOT NULL
                     )
                 """);
-                log.info("Schema migration: created final_reviews table");
-            }
-
-            // Migration: create case_flags table for existing DBs
-            boolean hasCaseFlags = connection.getMetaData()
-                .getTables(null, null, "case_flags", null).next();
-            if (!hasCaseFlags) {
-                stmt.executeUpdate("""
+        });
+        runMigration("case_flags table", () -> {
+            if (!connection.getMetaData().getTables(null, null, "case_flags", null).next())
+                connection.createStatement().executeUpdate("""
                     CREATE TABLE IF NOT EXISTS case_flags (
                         finding_id INTEGER NOT NULL UNIQUE REFERENCES findings(id)
                     )
                 """);
-                log.info("Schema migration: created case_flags table");
-            }
+        });
+    }
+
+    @FunctionalInterface
+    private interface MigrationStep { void run() throws SQLException; }
+
+    private void runMigration(String name, MigrationStep step) {
+        try {
+            step.run();
         } catch (SQLException e) {
-            log.warn("Schema migration check failed (non-fatal): {}", e.getMessage());
+            log.warn("Schema migration '{}' failed (non-fatal): {}", name, e.getMessage());
         }
     }
 

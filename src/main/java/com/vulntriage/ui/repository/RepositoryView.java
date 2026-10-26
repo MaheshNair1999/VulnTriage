@@ -417,12 +417,16 @@ public class RepositoryView {
         scanTask.messageProperty().addListener((o, old, msg) ->
             Platform.runLater(() -> setStatus(msg)));
 
-        scanTask.setOnSucceeded(e -> Platform.runLater(() -> {
-            scanningIds.forEach(id -> ctx.setScanRunning(id, false));
-            String msg = cancelRequested.get() ? "Scan stopped." : "Scan complete for: " + repoNames;
-            setScanningState(false, msg);
-            refresh();
-        }));
+        scanTask.setOnSucceeded(e -> {
+            // Flush WAL to disk before updating the UI so findings are not lost on crash
+            com.vulntriage.repository.sqlite.SQLiteConnection.getInstance().checkpoint();
+            Platform.runLater(() -> {
+                scanningIds.forEach(id -> ctx.setScanRunning(id, false));
+                String msg = cancelRequested.get() ? "Scan stopped." : "Scan complete for: " + repoNames;
+                setScanningState(false, msg);
+                refresh();
+            });
+        });
 
         scanTask.setOnFailed(e -> Platform.runLater(() -> {
             scanningIds.forEach(id -> ctx.setScanRunning(id, false));
