@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -31,17 +32,20 @@ public class SQLiteConnection {
         try {
             connection = DriverManager.getConnection(dbUrl);
             // Set busy_timeout first so subsequent pragmas wait for locks instead of failing
-            connection.createStatement().execute("PRAGMA busy_timeout=30000");
-            connection.createStatement().execute("PRAGMA foreign_keys = ON");
-            connection.createStatement().execute("PRAGMA synchronous=FULL");
+            try (Statement st = connection.createStatement()) {
+                st.execute("PRAGMA busy_timeout=30000");
+                st.execute("PRAGMA foreign_keys = ON");
+                st.execute("PRAGMA synchronous=FULL");
+            }
             // WAL mode allows concurrent reads during writes; non-fatal if it can't be set
-            try {
-                connection.createStatement().execute("PRAGMA journal_mode=WAL");
+            try (Statement st = connection.createStatement()) {
+                st.execute("PRAGMA journal_mode=WAL");
             } catch (SQLException walEx) {
                 log.warn("Could not enable WAL mode (non-fatal): {}", walEx.getMessage());
             }
             // Log the actual journal mode so startup logs confirm what is active
-            try (var rs = connection.createStatement().executeQuery("PRAGMA journal_mode")) {
+            try (Statement st = connection.createStatement();
+                 ResultSet rs = st.executeQuery("PRAGMA journal_mode")) {
                 if (rs.next()) log.info("SQLite journal mode: {}", rs.getString(1));
             } catch (SQLException ignored) {}
             log.info("Connected to SQLite database: {}", dbUrl);
@@ -77,8 +81,8 @@ public class SQLiteConnection {
      * Safe to call in any journal mode — PRAGMA wal_checkpoint is a no-op in non-WAL mode.
      */
     public void checkpoint() {
-        try {
-            connection.createStatement().execute("PRAGMA wal_checkpoint(FULL)");
+        try (Statement st = connection.createStatement()) {
+            st.execute("PRAGMA wal_checkpoint(FULL)");
         } catch (SQLException e) {
             log.warn("WAL checkpoint failed (non-fatal): {}", e.getMessage());
         }
@@ -241,72 +245,89 @@ public class SQLiteConnection {
     private void migrateSchema() {
         // Each migration runs independently — a failure in one does not block the rest.
         runMigration("prompt_templates table", () -> {
-            boolean has = connection.getMetaData().getTables(null, null, "prompt_templates", null).next();
-            if (!has) {
-                connection.createStatement().executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS prompt_templates (
-                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                        name        TEXT    NOT NULL,
-                        version     TEXT    NOT NULL UNIQUE,
-                        description TEXT,
-                        template    TEXT    NOT NULL,
-                        built_in    INTEGER NOT NULL DEFAULT 0,
-                        created_at  TEXT    NOT NULL
-                    )
-                """);
+            if (!tableExists("prompt_templates")) {
+                try (Statement st = connection.createStatement()) {
+                    st.executeUpdate("""
+                        CREATE TABLE IF NOT EXISTS prompt_templates (
+                            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                            name        TEXT    NOT NULL,
+                            version     TEXT    NOT NULL UNIQUE,
+                            description TEXT,
+                            template    TEXT    NOT NULL,
+                            built_in    INTEGER NOT NULL DEFAULT 0,
+                            created_at  TEXT    NOT NULL
+                        )
+                    """);
+                }
                 log.info("Schema migration: created prompt_templates table");
                 seedBuiltInPrompts();
             }
         });
         runMigration("cwe column", () -> {
-            if (!connection.getMetaData().getColumns(null, null, "findings", "cwe").next())
-                connection.createStatement().executeUpdate("ALTER TABLE findings ADD COLUMN cwe TEXT");
+            if (!columnExists("findings", "cwe"))
+                try (Statement st = connection.createStatement()) {
+                    st.executeUpdate("ALTER TABLE findings ADD COLUMN cwe TEXT");
+                }
         });
         runMigration("hidden column", () -> {
-            if (!connection.getMetaData().getColumns(null, null, "repositories", "hidden").next()) {
-                connection.createStatement().executeUpdate(
-                    "ALTER TABLE repositories ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
+            if (!columnExists("repositories", "hidden")) {
+                try (Statement st = connection.createStatement()) {
+                    st.executeUpdate(
+                        "ALTER TABLE repositories ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
+                }
                 log.info("Schema migration: added 'hidden' column to repositories table");
             }
         });
         runMigration("version column", () -> {
-            if (!connection.getMetaData().getColumns(null, null, "repositories", "version").next())
-                connection.createStatement().executeUpdate("ALTER TABLE repositories ADD COLUMN version TEXT");
+            if (!columnExists("repositories", "version"))
+                try (Statement st = connection.createStatement()) {
+                    st.executeUpdate("ALTER TABLE repositories ADD COLUMN version TEXT");
+                }
         });
         runMigration("cvss_vector column", () -> {
-            if (!connection.getMetaData().getColumns(null, null, "findings", "cvss_vector").next())
-                connection.createStatement().executeUpdate("ALTER TABLE findings ADD COLUMN cvss_vector TEXT");
+            if (!columnExists("findings", "cvss_vector"))
+                try (Statement st = connection.createStatement()) {
+                    st.executeUpdate("ALTER TABLE findings ADD COLUMN cvss_vector TEXT");
+                }
         });
         runMigration("cvss_score column", () -> {
-            if (!connection.getMetaData().getColumns(null, null, "findings", "cvss_score").next())
-                connection.createStatement().executeUpdate("ALTER TABLE findings ADD COLUMN cvss_score REAL");
+            if (!columnExists("findings", "cvss_score"))
+                try (Statement st = connection.createStatement()) {
+                    st.executeUpdate("ALTER TABLE findings ADD COLUMN cvss_score REAL");
+                }
         });
         runMigration("performance indexes", () -> {
-            connection.createStatement().executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_repository_id ON findings(repository_id)");
-            connection.createStatement().executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity)");
-            connection.createStatement().executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_source ON findings(source)");
-            connection.createStatement().executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_scan_run_id ON findings(scan_run_id)");
+            try (Statement st = connection.createStatement()) {
+                st.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_repository_id ON findings(repository_id)");
+                st.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity)");
+                st.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_source ON findings(source)");
+                st.executeUpdate("CREATE INDEX IF NOT EXISTS idx_findings_scan_run_id ON findings(scan_run_id)");
+            }
             log.info("Schema migration: ensured performance indexes on findings table");
         });
         runMigration("final_reviews table", () -> {
-            if (!connection.getMetaData().getTables(null, null, "final_reviews", null).next())
-                connection.createStatement().executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS final_reviews (
-                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                        finding_id  INTEGER NOT NULL UNIQUE REFERENCES findings(id),
-                        verdict     TEXT    NOT NULL,
-                        notes       TEXT,
-                        reviewed_at TEXT    NOT NULL
-                    )
-                """);
+            if (!tableExists("final_reviews"))
+                try (Statement st = connection.createStatement()) {
+                    st.executeUpdate("""
+                        CREATE TABLE IF NOT EXISTS final_reviews (
+                            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                            finding_id  INTEGER NOT NULL UNIQUE REFERENCES findings(id),
+                            verdict     TEXT    NOT NULL,
+                            notes       TEXT,
+                            reviewed_at TEXT    NOT NULL
+                        )
+                    """);
+                }
         });
         runMigration("case_flags table", () -> {
-            if (!connection.getMetaData().getTables(null, null, "case_flags", null).next())
-                connection.createStatement().executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS case_flags (
-                        finding_id INTEGER NOT NULL UNIQUE REFERENCES findings(id)
-                    )
-                """);
+            if (!tableExists("case_flags"))
+                try (Statement st = connection.createStatement()) {
+                    st.executeUpdate("""
+                        CREATE TABLE IF NOT EXISTS case_flags (
+                            finding_id INTEGER NOT NULL UNIQUE REFERENCES findings(id)
+                        )
+                    """);
+                }
         });
     }
 
@@ -318,6 +339,18 @@ public class SQLiteConnection {
             step.run();
         } catch (SQLException e) {
             log.warn("Schema migration '{}' failed (non-fatal): {}", name, e.getMessage());
+        }
+    }
+
+    private boolean tableExists(String table) throws SQLException {
+        try (ResultSet rs = connection.getMetaData().getTables(null, null, table, null)) {
+            return rs.next();
+        }
+    }
+
+    private boolean columnExists(String table, String column) throws SQLException {
+        try (ResultSet rs = connection.getMetaData().getColumns(null, null, table, column)) {
+            return rs.next();
         }
     }
 
