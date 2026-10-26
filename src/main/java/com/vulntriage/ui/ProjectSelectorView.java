@@ -262,9 +262,10 @@ public class ProjectSelectorView {
                             com.vulntriage.repository.sqlite.SQLiteConnection.reset();
                         }
                         Files.deleteIfExists(db);
-                        // Clean up SQLite WAL/SHM sidecar files if present
+                        // Clean up all SQLite sidecar files
                         Files.deleteIfExists(db.resolveSibling(db.getFileName() + "-wal"));
                         Files.deleteIfExists(db.resolveSibling(db.getFileName() + "-shm"));
+                        Files.deleteIfExists(db.resolveSibling(db.getFileName() + "-journal"));
                     } catch (Exception ex) {
                         new Alert(Alert.AlertType.ERROR,
                             "Could not delete:\n" + db + "\n\n" + ex.getMessage()).showAndWait();
