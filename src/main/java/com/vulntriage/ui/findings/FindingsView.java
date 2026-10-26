@@ -19,6 +19,8 @@ import javafx.util.Duration;
 
 import javafx.scene.control.SelectionMode;
 import javafx.scene.input.KeyCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -38,6 +40,7 @@ import static com.vulntriage.config.ThemeColors.*;
  */
 public class FindingsView {
 
+    private static final Logger            log       = LoggerFactory.getLogger(FindingsView.class);
     private static final DateTimeFormatter DATE_FMT  = DateTimeFormatter.ofPattern("dd MMM HH:mm");
     private static final int               PAGE_SIZE  = 500;
 
@@ -71,13 +74,13 @@ public class FindingsView {
     public Node build() {
         allRows    = FXCollections.observableArrayList();
         sortedRows = new SortedList<>(allRows);
-        loadPage();
 
         BorderPane root = new BorderPane();
         root.setStyle("-fx-background-color: " + BG + ";");
-        root.setTop   (buildToolbar());
+        root.setTop   (buildToolbar());   // initialises all UI fields (prevBtn, nextBtn, statusLabel, etc.)
         root.setCenter(buildTable());
         root.setBottom(buildStatusBar());
+        loadPage();   // start after all FX-thread DB work in buildToolbar() is done
         return root;
     }
 
@@ -217,7 +220,13 @@ public class FindingsView {
     // ── Refresh with spinner animation ────────────────────────────────────
 
     private void doRefresh(Runnable applyFilter) {
+        // Suppress the repo-filter action listener during repopulation so that
+        // clearing+refilling items doesn't fire extra loadPage() calls.
+        javafx.event.EventHandler<javafx.event.ActionEvent> saved = repoFilter.getOnAction();
+        repoFilter.setOnAction(null);
         populateRepoFilter();
+        repoFilter.setOnAction(saved);
+
         pageStack.clear();
         afterId = 0L;
         applyFilter.run();
@@ -615,6 +624,7 @@ public class FindingsView {
         });
 
         task.setOnFailed(e -> {
+            log.error("Findings page load failed", task.getException());
             allRows.clear();
             updateStatus();
         });
