@@ -745,7 +745,7 @@ public class RepositoryView {
             @Override
             protected Repository call() throws Exception {
                 List<String> cmd = new ArrayList<>();
-                cmd.add("git");
+                cmd.add(resolveGitPath());
                 cmd.add("clone");
                 if (req.version() != null) {
                     cmd.add("--branch"); cmd.add(req.version());
@@ -825,9 +825,43 @@ public class RepositoryView {
         return m.find() ? new String[]{m.group(1), m.group(2)} : null;
     }
 
+    private static volatile String resolvedGitPath = null;
+
+    private static String resolveGitPath() {
+        if (resolvedGitPath != null) return resolvedGitPath;
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        if (isWindows) {
+            resolvedGitPath = "git";
+            return resolvedGitPath;
+        }
+        try {
+            ProcessBuilder pb = new ProcessBuilder("which", "git");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            if (p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS) && p.exitValue() == 0) {
+                try (java.io.BufferedReader r = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(p.getInputStream()))) {
+                    String line = r.readLine();
+                    if (line != null && !line.isBlank()) {
+                        resolvedGitPath = line.trim();
+                        return resolvedGitPath;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        for (String candidate : new String[]{"/usr/bin/git", "/usr/local/bin/git", "/opt/homebrew/bin/git"}) {
+            if (new java.io.File(candidate).canExecute()) {
+                resolvedGitPath = candidate;
+                return resolvedGitPath;
+            }
+        }
+        resolvedGitPath = "git";
+        return resolvedGitPath;
+    }
+
     private String resolveClonedVersion(String clonePath) {
         try {
-            ProcessBuilder pb = new ProcessBuilder("git", "describe", "--tags", "--abbrev=0");
+            ProcessBuilder pb = new ProcessBuilder(resolveGitPath(), "describe", "--tags", "--abbrev=0");
             pb.directory(new File(clonePath));
             pb.redirectErrorStream(true);
             Process proc = pb.start();
