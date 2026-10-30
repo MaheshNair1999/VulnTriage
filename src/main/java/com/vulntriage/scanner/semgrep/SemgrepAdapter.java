@@ -158,11 +158,12 @@ public class SemgrepAdapter implements ScannerAdapter {
                 return resolvedSemgrepPath;
             }
         } else {
+            // Try `which semgrep` first (respects the current PATH)
             try {
                 ProcessBuilder pb = new ProcessBuilder("which", "semgrep");
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
-                if (p.waitFor(15, TimeUnit.SECONDS) && p.exitValue() == 0) {
+                if (p.waitFor(5, TimeUnit.SECONDS) && p.exitValue() == 0) {
                     try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
                         String line = r.readLine();
                         if (line != null && !line.isBlank()) {
@@ -172,6 +173,28 @@ public class SemgrepAdapter implements ScannerAdapter {
                     }
                 }
             } catch (Exception ignored) {}
+
+            // which failed — probe common pip/pipx install locations
+            List<String> candidates = new java.util.ArrayList<>();
+            String home = System.getProperty("user.home", "");
+            if (!home.isBlank()) {
+                candidates.add(home + "/.local/bin/semgrep");   // pip install --user
+                candidates.add(home + "/.pyenv/shims/semgrep"); // pyenv
+            }
+            candidates.add("/usr/local/bin/semgrep");
+            candidates.add("/usr/bin/semgrep");
+            for (String candidate : candidates) {
+                if (new java.io.File(candidate).canExecute()) {
+                    try {
+                        Process test = new ProcessBuilder(candidate, "--version")
+                            .redirectErrorStream(true).start();
+                        if (test.waitFor(5, TimeUnit.SECONDS) && test.exitValue() == 0) {
+                            resolvedSemgrepPath = candidate;
+                            return resolvedSemgrepPath;
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
         }
         resolvedSemgrepPath = "semgrep";
         return resolvedSemgrepPath;
